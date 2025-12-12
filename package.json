@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start -H 0.0.0.0",
     "lint": "next lint",
-    "deploy": "wrangler pages deploy ./out"
+    "deploy": "wrangler pages deploy ./out --project-name quickshare-frontend"
   },
   "dependencies": {
     "next": "^15.5.9",
