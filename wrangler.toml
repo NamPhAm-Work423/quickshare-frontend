@@ -4,5 +4,3 @@ compatibility_date = "2025-12-12"
 # Pages static output directory (produced by `npm run build` with output: 'export').
 pages_build_output_dir = "./out"
 
-# Serve the static export output produced by `next build`.
-assets = { directory = "./out" }
