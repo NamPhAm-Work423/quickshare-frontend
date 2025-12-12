@@ -1,0 +1,6 @@
+name = "nameshare-frontend"
+compatibility_date = "2025-12-12"
+
+# Serve the static export output produced by `next build` (with output: 'export').
+assets = { directory = "./out" }
+

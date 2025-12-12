@@ -2,8 +2,11 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Export static assets so the site can be deployed to edge asset hosting (e.g. Cloudflare assets).
+  output: 'export',
   images: {
     domains: [],
+    unoptimized: true,
   },
   // Allow cross-origin requests for development
   allowedDevOrigins: ['192.168.1.8'],
