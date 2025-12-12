@@ -7,36 +7,21 @@ import {
   DownloadByCodeResponse,
 } from './types';
 
-// Normalize backend URL for production-safe usage.
-// Priority: explicit env -> browser origin -> localhost dev fallback.
-const normalizeBaseUrl = (value: string): string => value.replace(/\/+$/, '');
-
-const getBackendUrl = (): string => {
-  const envUrl = process.env.NEXT_PUBLIC_BACKEND_URL?.trim();
-  if (envUrl) {
-    return normalizeBaseUrl(envUrl);
-  }
-
+const getApiBase = (): string => {
   if (typeof window !== 'undefined') {
-    const { protocol, hostname } = window.location;
-    const backendPort = '3001';
-    const origin = `${protocol}//${hostname}:${backendPort}`;
-    return normalizeBaseUrl(origin);
+    return window.location.origin;
   }
-
-  return 'http://localhost:3001';
+  // During build/static export, default to local dev origin.
+  return 'http://localhost:3000';
 };
 
-const buildUrl = (base: string, path: string): string =>
-  new URL(path, `${base}/`).toString();
+const buildUrl = (path: string): string => new URL(path, `${getApiBase()}/`).toString();
 
 export async function createSession(
   request: CreateSessionRequest
 ): Promise<CreateSessionResponse> {
-  const backendUrl = getBackendUrl();
-  
   try {
-    const response = await fetch(buildUrl(backendUrl, '/api/session/create'), {
+    const response = await fetch(buildUrl('/api/session/create'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -57,19 +42,10 @@ export async function createSession(
 
     return response.json() as Promise<CreateSessionResponse>;
   } catch (error) {
-    // Handle network errors (backend not running, CORS, etc.)
+    // Handle network errors (function not reachable, CORS, etc.)
     if (error instanceof TypeError && error.message.includes('fetch')) {
-      // Network error - backend might not be running or CORS issue
-      const isCorsError = error.message.includes('CORS') || error.message.includes('Failed to fetch');
-      if (isCorsError) {
-        throw new Error(
-          `CORS error: Backend at ${backendUrl} is not allowing requests from ${typeof window !== 'undefined' ? window.location.origin : 'this origin'}. ` +
-          'Please check backend CORS configuration.'
-        );
-      }
       throw new Error(
-        `Cannot connect to backend at ${backendUrl}. ` +
-        'Please ensure the backend server is running and accessible.'
+        'Cannot connect to API. Please ensure the Cloudflare Function is reachable.',
       );
     }
     // Re-throw other errors as-is
@@ -80,10 +56,8 @@ export async function createSession(
 export async function joinSession(
   request: JoinSessionRequest
 ): Promise<JoinSessionResponse> {
-  const backendUrl = getBackendUrl();
-  
   try {
-    const response = await fetch(buildUrl(backendUrl, '/api/session/join'), {
+    const response = await fetch(buildUrl('/api/session/join'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -104,16 +78,8 @@ export async function joinSession(
     return response.json() as Promise<JoinSessionResponse>;
   } catch (error) {
     if (error instanceof TypeError && error.message.includes('fetch')) {
-      const isCorsError = error.message.includes('CORS') || error.message.includes('Failed to fetch');
-      if (isCorsError) {
-        throw new Error(
-          `CORS error: Backend at ${backendUrl} is not allowing requests. ` +
-          'Please check backend CORS configuration.'
-        );
-      }
       throw new Error(
-        `Cannot connect to backend at ${backendUrl}. ` +
-        'Please ensure the backend server is running.'
+        'Cannot connect to API. Please ensure the Cloudflare Function is reachable.',
       );
     }
     throw error;
@@ -121,10 +87,8 @@ export async function joinSession(
 }
 
 export async function checkHealth(): Promise<{ status: string; version: string }> {
-  const backendUrl = getBackendUrl();
-  
   try {
-    const response = await fetch(buildUrl(backendUrl, '/health'), {
+    const response = await fetch(buildUrl('/api/health'), {
       headers: {
         'Cache-Control': 'no-cache',
       },
@@ -138,8 +102,7 @@ export async function checkHealth(): Promise<{ status: string; version: string }
   } catch (error) {
     if (error instanceof TypeError && error.message.includes('fetch')) {
       throw new Error(
-        `Cannot connect to backend at ${backendUrl}. ` +
-        'Please ensure the backend server is running.'
+        'Cannot connect to API. Please ensure the Cloudflare Function is reachable.',
       );
     }
     throw error;
@@ -147,10 +110,8 @@ export async function checkHealth(): Promise<{ status: string; version: string }
 }
 
 export async function downloadByCode(code: string): Promise<DownloadByCodeResponse> {
-  const backendUrl = getBackendUrl();
-  
   try {
-    const response = await fetch(buildUrl(backendUrl, '/api/session/download'), {
+    const response = await fetch(buildUrl('/api/session/download'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -171,16 +132,8 @@ export async function downloadByCode(code: string): Promise<DownloadByCodeRespon
     return response.json() as Promise<DownloadByCodeResponse>;
   } catch (error) {
     if (error instanceof TypeError && error.message.includes('fetch')) {
-      const isCorsError = error.message.includes('CORS') || error.message.includes('Failed to fetch');
-      if (isCorsError) {
-        throw new Error(
-          `CORS error: Backend at ${backendUrl} is not allowing requests. ` +
-          'Please check backend CORS configuration.'
-        );
-      }
       throw new Error(
-        `Cannot connect to backend at ${backendUrl}. ` +
-        'Please ensure the backend server is running.'
+        'Cannot connect to API. Please ensure the Cloudflare Function is reachable.',
       );
     }
     throw error;
