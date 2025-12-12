@@ -7,15 +7,54 @@ import {
   DownloadByCodeResponse,
 } from './types';
 
-const getApiBase = (): string => {
-  if (typeof window !== 'undefined') {
-    return window.location.origin;
+const isDevelopment = (): boolean => {
+  if (typeof window === 'undefined') {
+    return true; // Default to development during build
   }
-  // During build/static export, default to local dev origin.
-  return 'http://localhost:3000';
+  return window.location.hostname === 'localhost' || 
+         window.location.hostname === '127.0.0.1';
 };
 
-const buildUrl = (path: string): string => new URL(path, `${getApiBase()}/`).toString();
+const getApiBase = (): string => {
+  if (typeof window !== 'undefined') {
+    // Check for explicit backend URL override
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+    if (backendUrl) {
+      return backendUrl;
+    }
+    
+    // In development (localhost), call backend directly
+    if (isDevelopment()) {
+      // Development: backend runs on port 3001
+      return 'http://localhost:3001';
+    }
+    
+    // Production (Cloudflare Pages): use same origin, functions will proxy
+    // Cloudflare Functions will forward to backend using BACKEND_URL env var
+    return window.location.origin;
+  }
+  
+  // During build/static export
+  return process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+};
+
+const buildUrl = (path: string): string => {
+  const base = getApiBase();
+  const isDev = isDevelopment();
+  
+  // In development, call backend directly (backend paths)
+  // In production, call via Cloudflare Functions (functions paths)
+  let apiPath = path;
+  
+  // Health endpoint: backend uses /health, functions use /api/health
+  if (path === '/health' && !isDev && typeof window !== 'undefined') {
+    apiPath = '/api/health';
+  }
+  
+  // Remove trailing slash from base if present, then add path
+  const baseUrl = base.endsWith('/') ? base.slice(0, -1) : base;
+  return `${baseUrl}${apiPath}`;
+};
 
 export async function createSession(
   request: CreateSessionRequest
@@ -88,7 +127,7 @@ export async function joinSession(
 
 export async function checkHealth(): Promise<{ status: string; version: string }> {
   try {
-    const response = await fetch(buildUrl('/api/health'), {
+    const response = await fetch(buildUrl('/health'), {
       headers: {
         'Cache-Control': 'no-cache',
       },

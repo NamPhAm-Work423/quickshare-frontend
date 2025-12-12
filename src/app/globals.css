@@ -68,3 +68,9 @@
   }
 }
 
+/* Override nextjs-portal positioning */
+nextjs-portal {
+  left: unset !important;
+  top: unset !important;
+}
+
