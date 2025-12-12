@@ -45,15 +45,13 @@ export function UploadBox({ onUpload, isUploading = false }: UploadBoxProps) {
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
       if (acceptedFiles.length > 0) {
-        // Add files to local state
+        // Add files to local state (store sync handled by effect)
         setLocalFiles((prev) => [...prev, ...acceptedFiles]);
-        // Set first file to store for compatibility (backend expects single file)
-        setFile(acceptedFiles[0]);
         setText(null);
         setTextInput(''); // Clear text input when files are selected
       }
     },
-    [setFile, setText]
+    [setText]
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -107,16 +105,7 @@ export function UploadBox({ onUpload, isUploading = false }: UploadBoxProps) {
   };
 
   const handleRemoveFile = (indexToRemove: number) => {
-    setLocalFiles((prev) => {
-      const newFiles = prev.filter((_, index) => index !== indexToRemove);
-      // Update store with first file or null
-      if (newFiles.length > 0) {
-        setFile(newFiles[0]);
-      } else {
-        setFile(null);
-      }
-      return newFiles;
-    });
+    setLocalFiles((prev) => prev.filter((_, index) => index !== indexToRemove));
   };
 
   const handleTextInputChange = (value: string) => {
@@ -125,6 +114,14 @@ export function UploadBox({ onUpload, isUploading = false }: UploadBoxProps) {
     setText(value.trim().length > 0 ? value : null);
     // Don't clear files when typing - only clear when pasting or uploading
   };
+
+  // Keep store in sync with first local file (runs after render)
+  useEffect(() => {
+    setFile(file);
+    if (localFiles.length > 0) {
+      setText(null);
+    }
+  }, [file, localFiles.length, setFile, setText]);
 
   // Check if there's content to upload (file or non-empty text)
   // Use textInput for immediate feedback, fallback to text from store
@@ -135,8 +132,8 @@ export function UploadBox({ onUpload, isUploading = false }: UploadBoxProps) {
   const canUpload = hasContent && !isCurrentlyUploading;
 
   return (
-    <Card className="overflow-hidden">
-      <CardContent className="p-4 md:p-6 space-y-4">
+    <Card className="overflow-hidden border border-white/10 bg-white/5 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
+      <CardContent className="p-4 md:p-6 space-y-4 bg-gradient-to-b from-white/5 via-white/0 to-white/5">
         {/* Textarea ở trên */}
         <div className="space-y-2">
           <label className="text-sm font-medium">Nhập văn bản</label>
@@ -144,7 +141,7 @@ export function UploadBox({ onUpload, isUploading = false }: UploadBoxProps) {
             placeholder="Nhập hoặc dán văn bản của bạn ở đây..."
             value={textInput}
             onChange={(e) => handleTextInputChange(e.target.value)}
-            className="min-h-[150px] md:min-h-[200px] resize-none"
+            className="min-h-[150px] md:min-h-[200px] resize-none border-white/20 bg-white/10 text-foreground shadow-inner backdrop-blur-md focus-visible:ring-primary/70"
           />
           <p className="text-xs text-muted-foreground">
             {textInput.length} ký tự
@@ -154,23 +151,20 @@ export function UploadBox({ onUpload, isUploading = false }: UploadBoxProps) {
         {/* Divider */}
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-card px-2 text-muted-foreground">Hoặc</span>
+            <span className="w-full border-t border-white/20" />
           </div>
         </div>
 
-        {/* File upload area - thu nhỏ và ở dưới */}
+        {/* File upload area - shrink and put below */}
         <div className="space-y-2">
-          <label className="text-sm font-medium">Chọn file</label>
+          <label className="text-sm font-medium">Choose file</label>
           <div
             {...getRootProps()}
             className={cn(
-              'flex cursor-pointer items-center justify-center gap-3 rounded-lg border-2 border-dashed p-4 transition-colors',
+              'flex cursor-pointer items-center justify-center gap-3 rounded-lg border-2 border-dashed p-4 transition-colors bg-gradient-to-br from-white/5 via-white/0 to-white/5 backdrop-blur-md shadow-lg',
               isDragActive
-                ? 'border-primary bg-primary/5'
-                : 'border-muted-foreground/25 hover:border-primary/50',
+                ? 'border-primary bg-primary/10 shadow-primary/30'
+                : 'border-white/20 hover:border-primary/60',
               isCurrentlyUploading && 'opacity-50 cursor-not-allowed'
             )}
             style={{ pointerEvents: isCurrentlyUploading ? 'none' : 'auto' }}
@@ -180,10 +174,10 @@ export function UploadBox({ onUpload, isUploading = false }: UploadBoxProps) {
             <div className="text-center flex-1 min-w-0">
               <p className="text-sm font-medium truncate px-2">
                 {isDragActive
-                  ? 'Thả file vào đây'
+                  ? 'Drop file here'
                   : localFiles.length > 0
-                    ? `${localFiles.length} file${localFiles.length > 1 ? 's' : ''} đã chọn`
-                    : 'Kéo thả file hoặc click để chọn'}
+                    ? `${localFiles.length} file${localFiles.length > 1 ? 's' : ''} selected`
+                    : 'Drag and drop file or click to select'}
               </p>
               {localFiles.length > 0 && (
                 <p className="text-xs text-muted-foreground">

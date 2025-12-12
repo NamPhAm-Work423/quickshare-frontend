@@ -15,7 +15,6 @@ import { startP2PUpload } from '@/lib/p2p-upload';
 import { createSession } from '@/lib/api';
 import { TransferProgress } from '@/components/transfer-progress';
 import { ArrowUp, Search, FileText } from 'lucide-react';
-import { ThemeToggle } from '@/components/theme-toggle';
 
 export default function UploadPage() {
   const {
@@ -217,14 +216,11 @@ export default function UploadPage() {
     <main className="container mx-auto min-h-screen px-4 py-6 md:px-6 md:py-8">
       <div className="mx-auto max-w-3xl space-y-6 md:space-y-8">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex-1 text-center sm:text-left space-y-2">
-            <h1 className="text-3xl md:text-4xl font-bold tracking-tight">File Transfer</h1>
+          <div className="text-center sm:text-left">
+            <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Quickshare</h1>
             <p className="text-sm md:text-base text-muted-foreground">
               Upload files or share notes with a simple 6-digit code
             </p>
-          </div>
-          <div className="shrink-0">
-            <ThemeToggle />
           </div>
         </div>
 
@@ -334,4 +330,3 @@ export default function UploadPage() {
     </main>
   );
 }
-
