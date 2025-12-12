@@ -21,7 +21,8 @@
     "@radix-ui/react-slot": "^1.0.2",
     "@radix-ui/react-toast": "^1.1.5",
     "@radix-ui/react-progress": "^1.0.3",
-    "@radix-ui/react-dialog": "^1.0.5"
+    "@radix-ui/react-dialog": "^1.0.5",
+    "@cloudflare/workers-types": "^4.20241205.0"
   },
   "devDependencies": {
     "typescript": "^5.3.3",
