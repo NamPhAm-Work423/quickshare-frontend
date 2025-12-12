@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # File Transfer Service - Frontend
 
 A modern Next.js 15 application for transferring files and text notes using 6-digit codes.
@@ -202,3 +203,6 @@ Update `NEXT_PUBLIC_BACKEND_URL` in `.env.local` to point to your backend server
 
 MIT
 
+=======
+# quickshare-frontend
+>>>>>>> be485dfab85542eb777bb240ad867767a4a4dcee

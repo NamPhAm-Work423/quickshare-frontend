@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,27 @@ import { startP2PReceive } from '@/lib/p2p-upload';
 import { TransferProgress } from '@/components/transfer-progress';
 
 export default function ReceivePage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="container mx-auto min-h-screen px-4 py-6 md:px-6 md:py-8">
+          <div className="mx-auto max-w-2xl space-y-6 md:space-y-8">
+            <Card>
+              <CardContent className="flex items-center justify-center py-10">
+                <Loader className="mr-2" />
+                <span>Loading…</span>
+              </CardContent>
+            </Card>
+          </div>
+        </main>
+      }
+    >
+      <ReceivePageContent />
+    </Suspense>
+  );
+}
+
+function ReceivePageContent() {
   const [code, setCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [transferStatus, setTransferStatus] = useState<'idle' | 'connecting' | 'transferring' | 'completed' | 'error'>('idle');
@@ -33,11 +54,8 @@ export default function ReceivePage() {
   };
 
   const handleSubmit = async (e?: React.FormEvent) => {
-    if (e) {
-      e.preventDefault();
-    }
-    e.preventDefault();
-    
+    e?.preventDefault();
+
     if (code.length !== 6) {
       toast({
         title: 'Invalid code',
@@ -76,7 +94,7 @@ export default function ReceivePage() {
       const errorMessage = err instanceof Error ? err.message : 'Receive failed';
       setError(errorMessage);
       setTransferStatus('error');
-      
+
       let toastMessage = errorMessage;
       if (errorMessage.toLowerCase().includes('expired')) {
         toastMessage = 'This code has expired';
