@@ -3,12 +3,12 @@
 import { useEffect, useRef } from 'react';
 
 /**
- * Wormhole Space Nebula Background
- * - Deep space nebula gradient (purple, blue, pink, violet)
- * - Swirling vortex tunnel with depth
- * - Glowing stars/particles drifting toward center
- * - Smooth seamless animation loop
- * - Responsive + high-DPI aware
+ * Enhanced Wormhole Space Nebula Background
+ * - Deep space nebula gradient with richer colors
+ * - Multi-layered swirling vortex with depth
+ * - Dynamic particle systems with trails
+ * - Responsive + mobile optimized
+ * - Orientation aware
  */
 export function WormholeBackground() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -17,17 +17,20 @@ export function WormholeBackground() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
 
     let width = 0;
     let height = 0;
     let time = 0;
     let raf: number | null = null;
+    let isMobile = false;
+    let isPortrait = false;
 
-    // Particle systems
-    const starCount = 300;
-    const trailCount = 80;
+    // Responsive particle counts
+    let starCount = 300;
+    let trailCount = 80;
+    let dustCount = 150;
 
     interface Star {
       angle: number;
@@ -36,7 +39,7 @@ export function WormholeBackground() {
       brightness: number;
       speed: number;
       hue: number;
-      trail: number;
+      offset: number;
     }
 
     interface Trail {
@@ -46,71 +49,142 @@ export function WormholeBackground() {
       width: number;
       hue: number;
       speed: number;
+      curve: number;
     }
 
-    const stars: Star[] = [];
-    const trails: Trail[] = [];
+    interface Dust {
+      x: number;
+      y: number;
+      size: number;
+      alpha: number;
+      hue: number;
+      drift: number;
+      phase: number;
+    }
 
-    // Nebula colors (purple, violet, magenta, blue, cyan)
-    const nebulaHues = [280, 260, 320, 240, 200, 290];
+    let stars: Star[] = [];
+    let trails: Trail[] = [];
+    let dust: Dust[] = [];
+
+    // Enhanced nebula color palette
+    const nebulaHues = [280, 260, 320, 240, 200, 290, 300, 270];
 
     const rand = (min: number, max: number) => Math.random() * (max - min) + min;
     const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-
-    // Safe modulo that handles negative numbers
-    const mod = (n: number, m: number) => ((n % m) + m) % m;
+    const easeOutQuart = (t: number) => 1 - Math.pow(1 - t, 4);
 
     const createStar = (): Star => ({
       angle: Math.random() * Math.PI * 2,
-      depth: rand(0.3, 1),
-      size: rand(0.8, 2.5),
-      brightness: rand(0.5, 1),
-      speed: rand(0.003, 0.012),
+      depth: rand(0.2, 1),
+      size: rand(0.6, isMobile ? 2 : 2.8),
+      brightness: rand(0.4, 1),
+      speed: rand(0.002, isMobile ? 0.008 : 0.01),
       hue: nebulaHues[Math.floor(Math.random() * nebulaHues.length)],
-      trail: rand(0.3, 0.8),
+      offset: rand(0, Math.PI * 2),
     });
 
     const createTrail = (): Trail => ({
       angle: Math.random() * Math.PI * 2,
-      depth: rand(0.5, 1),
-      length: rand(50, 150),
-      width: rand(1, 3),
+      depth: rand(0.4, 1),
+      length: rand(40, isMobile ? 100 : 150),
+      width: rand(0.8, isMobile ? 2 : 3),
       hue: nebulaHues[Math.floor(Math.random() * nebulaHues.length)],
-      speed: rand(0.006, 0.015),
+      speed: rand(0.004, isMobile ? 0.01 : 0.014),
+      curve: rand(-0.3, 0.3),
     });
 
+    const createDust = (): Dust => ({
+      x: rand(0, 1),
+      y: rand(0, 1),
+      size: rand(0.5, isMobile ? 1.5 : 2.5),
+      alpha: rand(0.1, 0.4),
+      hue: nebulaHues[Math.floor(Math.random() * nebulaHues.length)],
+      drift: rand(-0.0003, 0.0003),
+      phase: rand(0, Math.PI * 2),
+    });
+
+    const getViewportSize = () => {
+      // Use visualViewport for accurate mobile sizing
+      const viewport = window.visualViewport;
+      if (viewport) {
+        return { width: viewport.width, height: viewport.height };
+      }
+      // Fallback with dvh-aware sizing
+      return {
+        width: window.innerWidth,
+        height: Math.max(window.innerHeight, document.documentElement.clientHeight),
+      };
+    };
+
+    const initParticles = () => {
+      stars = [];
+      trails = [];
+      dust = [];
+
+      // Adjust counts based on screen size and performance
+      const screenArea = width * height;
+      const baseFactor = Math.min(screenArea / (1920 * 1080), 1);
+      
+      if (isMobile) {
+        starCount = Math.floor(120 * baseFactor + 80);
+        trailCount = Math.floor(30 * baseFactor + 20);
+        dustCount = Math.floor(60 * baseFactor + 40);
+      } else {
+        starCount = Math.floor(250 * baseFactor + 100);
+        trailCount = Math.floor(60 * baseFactor + 30);
+        dustCount = Math.floor(120 * baseFactor + 50);
+      }
+
+      for (let i = 0; i < starCount; i++) stars.push(createStar());
+      for (let i = 0; i < trailCount; i++) trails.push(createTrail());
+      for (let i = 0; i < dustCount; i++) dust.push(createDust());
+    };
+
     const resize = () => {
-      const dpr = window.devicePixelRatio || 1;
-      width = window.innerWidth;
-      height = window.innerHeight;
+      const dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2);
+      const size = getViewportSize();
+      
+      const newWidth = size.width;
+      const newHeight = size.height;
+      
+      // Detect device type and orientation
+      isMobile = newWidth < 768 || 'ontouchstart' in window;
+      isPortrait = newHeight > newWidth;
+      
+      // Only reinit if size changed significantly
+      const sizeChanged = Math.abs(width - newWidth) > 50 || Math.abs(height - newHeight) > 50;
+      
+      width = newWidth;
+      height = newHeight;
+      
       canvas.width = width * dpr;
       canvas.height = height * dpr;
       canvas.style.width = `${width}px`;
       canvas.style.height = `${height}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      
+      if (sizeChanged || stars.length === 0) {
+        initParticles();
+      }
     };
 
-    // Initialize particles
-    for (let i = 0; i < starCount; i++) stars.push(createStar());
-    for (let i = 0; i < trailCount; i++) trails.push(createTrail());
-
     const drawBackground = () => {
-      // Deep space radial gradient
       const cx = width / 2;
       const cy = height / 2;
-      const maxR = Math.max(width, height);
+      // Extend gradient beyond viewport for edge coverage
+      const maxR = Math.hypot(width, height);
 
       const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, maxR);
       
-      // Animated subtle color pulse
-      const pulse = Math.sin(time * 0.0002) * 0.5 + 0.5;
-      const h1 = lerp(270, 290, pulse);
-      const h2 = lerp(240, 260, pulse);
+      const pulse = Math.sin(time * 0.00015) * 0.5 + 0.5;
+      const h1 = lerp(265, 295, pulse);
+      const h2 = lerp(235, 265, pulse);
 
-      bg.addColorStop(0, `hsl(${h1}, 80%, 12%)`);
-      bg.addColorStop(0.2, `hsl(${h2}, 70%, 6%)`);
-      bg.addColorStop(0.5, `hsl(260, 60%, 3%)`);
-      bg.addColorStop(1, `hsl(240, 50%, 1%)`);
+      bg.addColorStop(0, `hsl(${h1}, 85%, 14%)`);
+      bg.addColorStop(0.15, `hsl(${h2}, 75%, 8%)`);
+      bg.addColorStop(0.35, `hsl(255, 65%, 4%)`);
+      bg.addColorStop(0.6, `hsl(245, 55%, 2%)`);
+      bg.addColorStop(1, `hsl(235, 50%, 1%)`);
 
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, width, height);
@@ -119,29 +193,32 @@ export function WormholeBackground() {
     const drawNebulaGlow = () => {
       const cx = width / 2;
       const cy = height / 2;
-      const maxR = Math.min(width, height) * 0.8;
+      // Use larger radius for portrait mode
+      const baseR = isPortrait ? Math.max(width, height) * 0.6 : Math.min(width, height) * 0.75;
 
-      // Multiple layered nebula clouds
       const layers = [
-        { offset: 0, hue: 280, size: 0.9, alpha: 0.08 },
-        { offset: Math.PI * 0.3, hue: 320, size: 0.7, alpha: 0.06 },
-        { offset: Math.PI * 0.7, hue: 240, size: 0.8, alpha: 0.05 },
-        { offset: Math.PI * 1.2, hue: 260, size: 0.6, alpha: 0.07 },
+        { offset: 0, hue: 280, size: 1.0, alpha: 0.1, speed: 0.00012 },
+        { offset: Math.PI * 0.4, hue: 320, size: 0.8, alpha: 0.08, speed: 0.00015 },
+        { offset: Math.PI * 0.8, hue: 240, size: 0.9, alpha: 0.06, speed: 0.0001 },
+        { offset: Math.PI * 1.3, hue: 260, size: 0.7, alpha: 0.09, speed: 0.00018 },
+        { offset: Math.PI * 1.7, hue: 300, size: 0.6, alpha: 0.05, speed: 0.00014 },
       ];
 
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
 
       for (const layer of layers) {
-        const angleOffset = time * 0.00015 + layer.offset;
-        const x = cx + Math.cos(angleOffset) * maxR * 0.15;
-        const y = cy + Math.sin(angleOffset) * maxR * 0.1;
-        const r = maxR * layer.size;
+        const angleOffset = time * layer.speed + layer.offset;
+        const wobble = Math.sin(time * 0.0002 + layer.offset) * baseR * 0.08;
+        const x = cx + Math.cos(angleOffset) * (baseR * 0.12 + wobble);
+        const y = cy + Math.sin(angleOffset) * (baseR * 0.08 + wobble * 0.5);
+        const r = baseR * layer.size;
 
         const glow = ctx.createRadialGradient(x, y, 0, x, y, r);
-        glow.addColorStop(0, `hsla(${layer.hue}, 100%, 60%, ${layer.alpha})`);
-        glow.addColorStop(0.3, `hsla(${layer.hue}, 80%, 40%, ${layer.alpha * 0.6})`);
-        glow.addColorStop(0.6, `hsla(${layer.hue}, 60%, 25%, ${layer.alpha * 0.3})`);
+        glow.addColorStop(0, `hsla(${layer.hue}, 100%, 65%, ${layer.alpha})`);
+        glow.addColorStop(0.25, `hsla(${layer.hue}, 85%, 45%, ${layer.alpha * 0.7})`);
+        glow.addColorStop(0.5, `hsla(${layer.hue}, 70%, 30%, ${layer.alpha * 0.4})`);
+        glow.addColorStop(0.75, `hsla(${layer.hue}, 55%, 20%, ${layer.alpha * 0.15})`);
         glow.addColorStop(1, 'transparent');
 
         ctx.fillStyle = glow;
@@ -151,47 +228,83 @@ export function WormholeBackground() {
       ctx.restore();
     };
 
+    const drawDust = () => {
+      ctx.save();
+      
+      for (const d of dust) {
+        // Gentle floating motion
+        d.x += d.drift + Math.sin(time * 0.001 + d.phase) * 0.0001;
+        d.y += Math.cos(time * 0.0008 + d.phase) * 0.0001;
+        
+        // Wrap around
+        if (d.x < -0.1) d.x = 1.1;
+        if (d.x > 1.1) d.x = -0.1;
+        if (d.y < -0.1) d.y = 1.1;
+        if (d.y > 1.1) d.y = -0.1;
+
+        const x = d.x * width;
+        const y = d.y * height;
+        const twinkle = 0.7 + Math.sin(time * 0.003 + d.phase) * 0.3;
+        const alpha = d.alpha * twinkle;
+
+        const glow = ctx.createRadialGradient(x, y, 0, x, y, d.size * 4);
+        glow.addColorStop(0, `hsla(${d.hue}, 80%, 85%, ${alpha})`);
+        glow.addColorStop(0.4, `hsla(${d.hue}, 70%, 60%, ${alpha * 0.4})`);
+        glow.addColorStop(1, 'transparent');
+
+        ctx.fillStyle = glow;
+        ctx.fillRect(x - d.size * 4, y - d.size * 4, d.size * 8, d.size * 8);
+      }
+
+      ctx.restore();
+    };
+
     const drawVortex = () => {
       const cx = width / 2;
       const cy = height / 2;
-      const maxRadius = Math.min(width, height) * 0.45;
+      // Adaptive vortex size - larger on portrait for better visibility
+      const scaleFactor = isPortrait ? 0.38 : 0.42;
+      const maxRadius = Math.min(width, height) * scaleFactor;
 
       ctx.save();
       ctx.translate(cx, cy);
 
-      // Outer glow rings
-      const ringCount = 20;
+      const ringCount = isMobile ? 15 : 22;
+      const armCount = isMobile ? 3 : 4;
+
       for (let i = ringCount; i >= 0; i--) {
         const progress = i / ringCount;
-        const radius = maxRadius * (0.1 + progress * 0.9);
-        const rotation = time * 0.0006 * (2 - progress * 1.5);
+        const easedProgress = easeOutQuart(progress);
+        const radius = maxRadius * (0.08 + easedProgress * 0.92);
+        const rotationSpeed = isMobile ? 0.0004 : 0.0005;
+        const rotation = time * rotationSpeed * (2.2 - progress * 1.6);
 
         ctx.save();
         ctx.rotate(rotation);
 
-        // Dynamic hue based on ring position
-        const hue = 260 + progress * 40 + Math.sin(time * 0.001 + i * 0.5) * 20;
-        const alpha = lerp(0.3, 0.02, progress);
-        const lineWidth = lerp(8, 1, progress);
+        const hue = 255 + progress * 50 + Math.sin(time * 0.0008 + i * 0.4) * 25;
+        const alpha = lerp(0.35, 0.015, progress);
+        const lineWidth = lerp(isMobile ? 6 : 10, 0.8, progress);
 
-        // Draw spiral arms
-        const arms = 4;
-        for (let a = 0; a < arms; a++) {
-          const armAngle = (a / arms) * Math.PI * 2;
-          const spiralTwist = progress * Math.PI * 2;
+        for (let a = 0; a < armCount; a++) {
+          const armAngle = (a / armCount) * Math.PI * 2;
+          const spiralTwist = easedProgress * Math.PI * 2.5;
+          const arcLength = Math.PI * (isMobile ? 0.35 : 0.42);
 
           ctx.beginPath();
-          ctx.arc(0, 0, radius, armAngle + spiralTwist, armAngle + spiralTwist + Math.PI * 0.4);
-          
+          ctx.arc(0, 0, radius, armAngle + spiralTwist, armAngle + spiralTwist + arcLength);
+
           const gradient = ctx.createLinearGradient(
             Math.cos(armAngle + spiralTwist) * radius,
             Math.sin(armAngle + spiralTwist) * radius,
-            Math.cos(armAngle + spiralTwist + Math.PI * 0.4) * radius,
-            Math.sin(armAngle + spiralTwist + Math.PI * 0.4) * radius
+            Math.cos(armAngle + spiralTwist + arcLength) * radius,
+            Math.sin(armAngle + spiralTwist + arcLength) * radius
           );
-          gradient.addColorStop(0, `hsla(${hue}, 90%, 70%, ${alpha})`);
-          gradient.addColorStop(0.5, `hsla(${hue + 20}, 80%, 50%, ${alpha * 0.8})`);
-          gradient.addColorStop(1, `hsla(${hue}, 70%, 40%, ${alpha * 0.3})`);
+          
+          gradient.addColorStop(0, `hsla(${hue}, 95%, 75%, ${alpha})`);
+          gradient.addColorStop(0.3, `hsla(${hue + 15}, 90%, 60%, ${alpha * 0.9})`);
+          gradient.addColorStop(0.6, `hsla(${hue + 25}, 85%, 50%, ${alpha * 0.6})`);
+          gradient.addColorStop(1, `hsla(${hue}, 75%, 40%, ${alpha * 0.2})`);
 
           ctx.strokeStyle = gradient;
           ctx.lineWidth = lineWidth;
@@ -202,20 +315,34 @@ export function WormholeBackground() {
         ctx.restore();
       }
 
-      // Bright center core
-      const coreSize = maxRadius * 0.12;
-      const coreHue = 280 + Math.sin(time * 0.002) * 30;
-      
-      const coreGlow = ctx.createRadialGradient(0, 0, 0, 0, 0, coreSize * 3);
-      coreGlow.addColorStop(0, `hsla(${coreHue}, 100%, 95%, 1)`);
-      coreGlow.addColorStop(0.1, `hsla(${coreHue}, 100%, 80%, 0.9)`);
-      coreGlow.addColorStop(0.3, `hsla(${coreHue}, 90%, 60%, 0.5)`);
-      coreGlow.addColorStop(0.6, `hsla(${coreHue + 30}, 80%, 40%, 0.2)`);
-      coreGlow.addColorStop(1, 'transparent');
+      // Enhanced center core with multiple layers
+      const coreSize = maxRadius * (isMobile ? 0.1 : 0.11);
+      const coreHue = 275 + Math.sin(time * 0.0015) * 35;
 
-      ctx.fillStyle = coreGlow;
+      // Outer core halo
+      const outerHalo = ctx.createRadialGradient(0, 0, 0, 0, 0, coreSize * 5);
+      outerHalo.addColorStop(0, `hsla(${coreHue}, 100%, 98%, 0.95)`);
+      outerHalo.addColorStop(0.08, `hsla(${coreHue}, 100%, 90%, 0.85)`);
+      outerHalo.addColorStop(0.2, `hsla(${coreHue}, 95%, 75%, 0.6)`);
+      outerHalo.addColorStop(0.4, `hsla(${coreHue + 20}, 90%, 55%, 0.3)`);
+      outerHalo.addColorStop(0.7, `hsla(${coreHue + 40}, 80%, 40%, 0.1)`);
+      outerHalo.addColorStop(1, 'transparent');
+
+      ctx.fillStyle = outerHalo;
       ctx.beginPath();
-      ctx.arc(0, 0, coreSize * 3, 0, Math.PI * 2);
+      ctx.arc(0, 0, coreSize * 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Inner bright core
+      const innerCore = ctx.createRadialGradient(0, 0, 0, 0, 0, coreSize * 1.5);
+      innerCore.addColorStop(0, `hsla(0, 0%, 100%, 1)`);
+      innerCore.addColorStop(0.3, `hsla(${coreHue}, 100%, 95%, 0.95)`);
+      innerCore.addColorStop(0.7, `hsla(${coreHue}, 90%, 80%, 0.7)`);
+      innerCore.addColorStop(1, 'transparent');
+
+      ctx.fillStyle = innerCore;
+      ctx.beginPath();
+      ctx.arc(0, 0, coreSize * 1.5, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.restore();
@@ -224,42 +351,53 @@ export function WormholeBackground() {
     const drawTrails = () => {
       const cx = width / 2;
       const cy = height / 2;
-      const maxRadius = Math.max(width, height) * 0.7;
+      // Extend trails to cover portrait screens
+      const maxRadius = Math.hypot(width, height) * 0.55;
 
       ctx.save();
       ctx.translate(cx, cy);
 
       for (const trail of trails) {
-        // Move toward center with slight spiral
         trail.depth -= trail.speed;
-        trail.angle += 0.008 * (1 - trail.depth);
+        trail.angle += (0.006 + trail.curve * 0.01) * (1 - trail.depth);
 
-        if (trail.depth <= 0.05) {
+        if (trail.depth <= 0.03) {
           Object.assign(trail, createTrail());
           trail.depth = 1;
         }
 
         const startRadius = maxRadius * trail.depth;
-        const endRadius = maxRadius * Math.max(0.05, trail.depth - 0.15);
+        const endRadius = maxRadius * Math.max(0.03, trail.depth - 0.12);
 
-        const startX = Math.cos(trail.angle) * startRadius;
-        const startY = Math.sin(trail.angle) * startRadius;
-        const endX = Math.cos(trail.angle) * endRadius;
-        const endY = Math.sin(trail.angle) * endRadius;
+        // Add curve to trails
+        const curveOffset = trail.curve * (1 - trail.depth) * 0.15;
+        const startAngle = trail.angle;
+        const endAngle = trail.angle + curveOffset;
 
-        const alpha = (1 - trail.depth) * 0.6;
+        const startX = Math.cos(startAngle) * startRadius;
+        const startY = Math.sin(startAngle) * startRadius;
+        const endX = Math.cos(endAngle) * endRadius;
+        const endY = Math.sin(endAngle) * endRadius;
+
+        const alpha = (1 - trail.depth) * 0.7;
 
         const gradient = ctx.createLinearGradient(startX, startY, endX, endY);
         gradient.addColorStop(0, 'transparent');
-        gradient.addColorStop(0.3, `hsla(${trail.hue}, 80%, 70%, ${alpha * 0.3})`);
-        gradient.addColorStop(0.7, `hsla(${trail.hue}, 90%, 80%, ${alpha})`);
-        gradient.addColorStop(1, `hsla(${trail.hue}, 100%, 90%, ${alpha * 1.2})`);
+        gradient.addColorStop(0.2, `hsla(${trail.hue}, 75%, 65%, ${alpha * 0.2})`);
+        gradient.addColorStop(0.5, `hsla(${trail.hue}, 85%, 75%, ${alpha * 0.7})`);
+        gradient.addColorStop(0.8, `hsla(${trail.hue}, 95%, 85%, ${alpha})`);
+        gradient.addColorStop(1, `hsla(${trail.hue}, 100%, 95%, ${alpha * 0.9})`);
 
         ctx.beginPath();
         ctx.moveTo(startX, startY);
-        ctx.lineTo(endX, endY);
+        
+        // Bezier curve for smoother trails
+        const midX = (startX + endX) / 2 + Math.cos(trail.angle + Math.PI / 2) * trail.curve * 20;
+        const midY = (startY + endY) / 2 + Math.sin(trail.angle + Math.PI / 2) * trail.curve * 20;
+        ctx.quadraticCurveTo(midX, midY, endX, endY);
+        
         ctx.strokeStyle = gradient;
-        ctx.lineWidth = trail.width * (1.5 - trail.depth);
+        ctx.lineWidth = trail.width * (1.8 - trail.depth);
         ctx.lineCap = 'round';
         ctx.stroke();
       }
@@ -270,17 +408,16 @@ export function WormholeBackground() {
     const drawStars = () => {
       const cx = width / 2;
       const cy = height / 2;
-      const maxRadius = Math.max(width, height) * 0.75;
+      const maxRadius = Math.hypot(width, height) * 0.6;
 
       ctx.save();
       ctx.translate(cx, cy);
 
       for (const star of stars) {
-        // Move toward center with spiral motion
         star.depth -= star.speed;
-        star.angle += 0.004 * (1 - star.depth);
+        star.angle += 0.003 * (1 - star.depth);
 
-        if (star.depth <= 0.02) {
+        if (star.depth <= 0.01) {
           Object.assign(star, createStar());
           star.depth = 1;
         }
@@ -290,17 +427,17 @@ export function WormholeBackground() {
         const y = Math.sin(star.angle) * radius;
 
         const baseAlpha = (1 - star.depth) * star.brightness;
-        // Twinkling
-        const twinkle = 0.6 + Math.sin(time * 0.008 + star.angle * 5) * 0.4;
-        const alpha = baseAlpha * twinkle;
-        const size = star.size * (2 - star.depth) * 1.2;
+        const twinkle = 0.5 + Math.sin(time * 0.006 + star.offset) * 0.5;
+        const alpha = Math.min(baseAlpha * twinkle, 1);
+        const size = star.size * (2.2 - star.depth) * (isMobile ? 0.9 : 1.1);
 
-        // Star glow
-        const glowSize = size * 6;
+        // Soft glow
+        const glowSize = size * (isMobile ? 5 : 7);
         const glow = ctx.createRadialGradient(x, y, 0, x, y, glowSize);
-        glow.addColorStop(0, `hsla(${star.hue}, 100%, 95%, ${alpha})`);
-        glow.addColorStop(0.15, `hsla(${star.hue}, 90%, 80%, ${alpha * 0.7})`);
-        glow.addColorStop(0.4, `hsla(${star.hue}, 80%, 60%, ${alpha * 0.3})`);
+        glow.addColorStop(0, `hsla(${star.hue}, 100%, 98%, ${alpha})`);
+        glow.addColorStop(0.12, `hsla(${star.hue}, 95%, 85%, ${alpha * 0.75})`);
+        glow.addColorStop(0.35, `hsla(${star.hue}, 85%, 65%, ${alpha * 0.35})`);
+        glow.addColorStop(0.6, `hsla(${star.hue}, 75%, 50%, ${alpha * 0.1})`);
         glow.addColorStop(1, 'transparent');
 
         ctx.fillStyle = glow;
@@ -309,9 +446,9 @@ export function WormholeBackground() {
         ctx.fill();
 
         // Bright core
-        ctx.fillStyle = `hsla(0, 0%, 100%, ${alpha * 0.9})`;
+        ctx.fillStyle = `hsla(0, 0%, 100%, ${alpha * 0.95})`;
         ctx.beginPath();
-        ctx.arc(x, y, size * 0.4, 0, Math.PI * 2);
+        ctx.arc(x, y, size * 0.35, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -321,62 +458,119 @@ export function WormholeBackground() {
     const drawCenterFlare = () => {
       const cx = width / 2;
       const cy = height / 2;
-      const flareSize = Math.min(width, height) * 0.4;
+      const flareSize = Math.min(width, height) * (isPortrait ? 0.35 : 0.4);
 
-      // Pulsing center light
-      const pulse = 0.8 + Math.sin(time * 0.003) * 0.2;
-      const hue = 280 + Math.sin(time * 0.001) * 20;
+      const pulse = 0.75 + Math.sin(time * 0.002) * 0.25;
+      const hue = 275 + Math.sin(time * 0.0008) * 25;
 
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
 
-      // Vertical light beam
-      const beamGradient = ctx.createLinearGradient(cx, cy - flareSize, cx, cy + flareSize);
-      beamGradient.addColorStop(0, 'transparent');
-      beamGradient.addColorStop(0.4, `hsla(${hue}, 100%, 90%, ${0.05 * pulse})`);
-      beamGradient.addColorStop(0.5, `hsla(${hue}, 100%, 95%, ${0.12 * pulse})`);
-      beamGradient.addColorStop(0.6, `hsla(${hue}, 100%, 90%, ${0.05 * pulse})`);
-      beamGradient.addColorStop(1, 'transparent');
+      // Cross flare beams
+      const beamWidth = isMobile ? 4 : 6;
+      
+      // Vertical beam
+      const vGradient = ctx.createLinearGradient(cx, cy - flareSize, cx, cy + flareSize);
+      vGradient.addColorStop(0, 'transparent');
+      vGradient.addColorStop(0.35, `hsla(${hue}, 100%, 92%, ${0.04 * pulse})`);
+      vGradient.addColorStop(0.5, `hsla(${hue}, 100%, 98%, ${0.15 * pulse})`);
+      vGradient.addColorStop(0.65, `hsla(${hue}, 100%, 92%, ${0.04 * pulse})`);
+      vGradient.addColorStop(1, 'transparent');
 
-      ctx.fillStyle = beamGradient;
-      ctx.fillRect(cx - 3, cy - flareSize, 6, flareSize * 2);
+      ctx.fillStyle = vGradient;
+      ctx.fillRect(cx - beamWidth / 2, cy - flareSize, beamWidth, flareSize * 2);
 
-      // Horizontal light beam
-      const hBeamGradient = ctx.createLinearGradient(cx - flareSize, cy, cx + flareSize, cy);
-      hBeamGradient.addColorStop(0, 'transparent');
-      hBeamGradient.addColorStop(0.4, `hsla(${hue + 30}, 100%, 90%, ${0.04 * pulse})`);
-      hBeamGradient.addColorStop(0.5, `hsla(${hue + 30}, 100%, 95%, ${0.1 * pulse})`);
-      hBeamGradient.addColorStop(0.6, `hsla(${hue + 30}, 100%, 90%, ${0.04 * pulse})`);
-      hBeamGradient.addColorStop(1, 'transparent');
+      // Horizontal beam
+      const hGradient = ctx.createLinearGradient(cx - flareSize, cy, cx + flareSize, cy);
+      hGradient.addColorStop(0, 'transparent');
+      hGradient.addColorStop(0.35, `hsla(${hue + 25}, 100%, 92%, ${0.035 * pulse})`);
+      hGradient.addColorStop(0.5, `hsla(${hue + 25}, 100%, 98%, ${0.12 * pulse})`);
+      hGradient.addColorStop(0.65, `hsla(${hue + 25}, 100%, 92%, ${0.035 * pulse})`);
+      hGradient.addColorStop(1, 'transparent');
 
-      ctx.fillStyle = hBeamGradient;
-      ctx.fillRect(cx - flareSize, cy - 2, flareSize * 2, 4);
+      ctx.fillStyle = hGradient;
+      ctx.fillRect(cx - flareSize, cy - beamWidth / 2 + 1, flareSize * 2, beamWidth - 2);
+
+      // Diagonal rays (subtle)
+      if (!isMobile) {
+        const rayAlpha = 0.025 * pulse;
+        ctx.strokeStyle = `hsla(${hue + 15}, 100%, 90%, ${rayAlpha})`;
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        
+        const rayLen = flareSize * 0.7;
+        const angles = [Math.PI / 4, -Math.PI / 4, Math.PI * 3 / 4, -Math.PI * 3 / 4];
+        
+        for (const angle of angles) {
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(cx + Math.cos(angle) * rayLen, cy + Math.sin(angle) * rayLen);
+          ctx.stroke();
+        }
+      }
 
       ctx.restore();
     };
 
-    const render = () => {
-      time += 16;
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
+    // Edge vignette for depth
+    const drawVignette = () => {
+      const gradient = ctx.createRadialGradient(
+        width / 2, height / 2, Math.min(width, height) * 0.3,
+        width / 2, height / 2, Math.hypot(width, height) * 0.7
+      );
+      gradient.addColorStop(0, 'transparent');
+      gradient.addColorStop(0.6, 'transparent');
+      gradient.addColorStop(1, 'rgba(0, 0, 10, 0.4)');
 
-      // Render layers
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, height);
+    };
+
+    const render = () => {
+      const dt = isMobile ? 18 : 16;
+      time += dt;
+      
+      // Reset transform for clean slate
+      const dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      // Layer rendering
       drawBackground();
       drawNebulaGlow();
+      drawDust();
       drawTrails();
       drawVortex();
       drawStars();
       drawCenterFlare();
+      drawVignette();
 
       raf = requestAnimationFrame(render);
     };
 
+    // Debounced resize handler
+    let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
+    const debouncedResize = () => {
+      if (resizeTimeout) clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(resize, 100);
+    };
+
+    // Initial setup
     resize();
     render();
-    window.addEventListener('resize', resize);
+
+    // Event listeners
+    window.addEventListener('resize', debouncedResize);
+    window.visualViewport?.addEventListener('resize', debouncedResize);
+    window.addEventListener('orientationchange', () => {
+      // Delay for orientation animation
+      setTimeout(resize, 200);
+    });
 
     return () => {
       if (raf) cancelAnimationFrame(raf);
-      window.removeEventListener('resize', resize);
+      if (resizeTimeout) clearTimeout(resizeTimeout);
+      window.removeEventListener('resize', debouncedResize);
+      window.visualViewport?.removeEventListener('resize', debouncedResize);
     };
   }, []);
 
@@ -384,7 +578,13 @@ export function WormholeBackground() {
     <canvas
       ref={canvasRef}
       aria-hidden="true"
-      className="fixed inset-0 -z-10 h-full w-full"
+      className="fixed inset-0 -z-10 w-full"
+      style={{
+        height: '100dvh',
+        minHeight: '100vh',
+        touchAction: 'none',
+        WebkitTouchCallout: 'none',
+      }}
     />
   );
 }
