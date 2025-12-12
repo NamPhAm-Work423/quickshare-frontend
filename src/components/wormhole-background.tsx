@@ -20,17 +20,19 @@ export function WormholeBackground() {
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
 
-    let width = 0;
-    let height = 0;
+    // Fixed canvas dimensions
+    const FIXED_WIDTH = 1920;
+    const FIXED_HEIGHT = 1080;
+    const width = FIXED_WIDTH;
+    const height = FIXED_HEIGHT;
+
     let time = 0;
     let raf: number | null = null;
-    let isMobile = false;
-    let isPortrait = false;
 
-    // Responsive particle counts
-    let starCount = 300;
-    let trailCount = 80;
-    let dustCount = 150;
+    // Fixed particle counts
+    const starCount = 300;
+    const trailCount = 80;
+    const dustCount = 150;
 
     interface Star {
       angle: number;
@@ -76,9 +78,9 @@ export function WormholeBackground() {
     const createStar = (): Star => ({
       angle: Math.random() * Math.PI * 2,
       depth: rand(0.2, 1),
-      size: rand(0.6, isMobile ? 2 : 2.8),
+      size: rand(0.6, 2.8),
       brightness: rand(0.4, 1),
-      speed: rand(0.002, isMobile ? 0.008 : 0.01),
+      speed: rand(0.002, 0.01),
       hue: nebulaHues[Math.floor(Math.random() * nebulaHues.length)],
       offset: rand(0, Math.PI * 2),
     });
@@ -86,86 +88,54 @@ export function WormholeBackground() {
     const createTrail = (): Trail => ({
       angle: Math.random() * Math.PI * 2,
       depth: rand(0.4, 1),
-      length: rand(40, isMobile ? 100 : 150),
-      width: rand(0.8, isMobile ? 2 : 3),
+      length: rand(40, 150),
+      width: rand(0.8, 3),
       hue: nebulaHues[Math.floor(Math.random() * nebulaHues.length)],
-      speed: rand(0.004, isMobile ? 0.01 : 0.014),
+      speed: rand(0.004, 0.014),
       curve: rand(-0.3, 0.3),
     });
 
     const createDust = (): Dust => ({
       x: rand(0, 1),
       y: rand(0, 1),
-      size: rand(0.5, isMobile ? 1.5 : 2.5),
+      size: rand(0.5, 2.5),
       alpha: rand(0.1, 0.4),
       hue: nebulaHues[Math.floor(Math.random() * nebulaHues.length)],
       drift: rand(-0.0003, 0.0003),
       phase: rand(0, Math.PI * 2),
     });
 
-    const getViewportSize = () => {
-      // Use visualViewport for accurate mobile sizing
-      const viewport = window.visualViewport;
-      if (viewport) {
-        return { width: viewport.width, height: viewport.height };
-      }
-      // Fallback with dvh-aware sizing
-      return {
-        width: window.innerWidth,
-        height: Math.max(window.innerHeight, document.documentElement.clientHeight),
-      };
-    };
-
     const initParticles = () => {
       stars = [];
       trails = [];
       dust = [];
-
-      // Adjust counts based on screen size and performance
-      const screenArea = width * height;
-      const baseFactor = Math.min(screenArea / (1920 * 1080), 1);
-      
-      if (isMobile) {
-        starCount = Math.floor(120 * baseFactor + 80);
-        trailCount = Math.floor(30 * baseFactor + 20);
-        dustCount = Math.floor(60 * baseFactor + 40);
-      } else {
-        starCount = Math.floor(250 * baseFactor + 100);
-        trailCount = Math.floor(60 * baseFactor + 30);
-        dustCount = Math.floor(120 * baseFactor + 50);
-      }
 
       for (let i = 0; i < starCount; i++) stars.push(createStar());
       for (let i = 0; i < trailCount; i++) trails.push(createTrail());
       for (let i = 0; i < dustCount; i++) dust.push(createDust());
     };
 
-    const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2);
-      const size = getViewportSize();
+    const setupCanvas = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
       
-      const newWidth = size.width;
-      const newHeight = size.height;
-      
-      // Detect device type and orientation
-      isMobile = newWidth < 768 || 'ontouchstart' in window;
-      isPortrait = newHeight > newWidth;
-      
-      // Only reinit if size changed significantly
-      const sizeChanged = Math.abs(width - newWidth) > 50 || Math.abs(height - newHeight) > 50;
-      
-      width = newWidth;
-      height = newHeight;
-      
+      // Set fixed canvas dimensions
       canvas.width = width * dpr;
       canvas.height = height * dpr;
       canvas.style.width = `${width}px`;
       canvas.style.height = `${height}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       
-      if (sizeChanged || stars.length === 0) {
-        initParticles();
-      }
+      // Calculate scale to fit viewport
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const scaleX = viewportWidth / width;
+      const scaleY = viewportHeight / height;
+      const scale = Math.max(scaleX, scaleY); // Cover entire viewport
+      
+      // Apply transform to center and scale
+      canvas.style.transform = `translate(-50%, -50%) scale(${scale})`;
+      canvas.style.left = '50%';
+      canvas.style.top = '50%';
     };
 
     const drawBackground = () => {
@@ -193,8 +163,7 @@ export function WormholeBackground() {
     const drawNebulaGlow = () => {
       const cx = width / 2;
       const cy = height / 2;
-      // Use larger radius for portrait mode
-      const baseR = isPortrait ? Math.max(width, height) * 0.6 : Math.min(width, height) * 0.75;
+      const baseR = Math.min(width, height) * 0.75;
 
       const layers = [
         { offset: 0, hue: 280, size: 1.0, alpha: 0.1, speed: 0.00012 },
@@ -262,21 +231,19 @@ export function WormholeBackground() {
     const drawVortex = () => {
       const cx = width / 2;
       const cy = height / 2;
-      // Adaptive vortex size - larger on portrait for better visibility
-      const scaleFactor = isPortrait ? 0.38 : 0.42;
-      const maxRadius = Math.min(width, height) * scaleFactor;
+      const maxRadius = Math.min(width, height) * 0.42;
 
       ctx.save();
       ctx.translate(cx, cy);
 
-      const ringCount = isMobile ? 15 : 22;
-      const armCount = isMobile ? 3 : 4;
+      const ringCount = 22;
+      const armCount = 4;
 
       for (let i = ringCount; i >= 0; i--) {
         const progress = i / ringCount;
         const easedProgress = easeOutQuart(progress);
         const radius = maxRadius * (0.08 + easedProgress * 0.92);
-        const rotationSpeed = isMobile ? 0.0004 : 0.0005;
+        const rotationSpeed = 0.0005;
         const rotation = time * rotationSpeed * (2.2 - progress * 1.6);
 
         ctx.save();
@@ -284,12 +251,12 @@ export function WormholeBackground() {
 
         const hue = 255 + progress * 50 + Math.sin(time * 0.0008 + i * 0.4) * 25;
         const alpha = lerp(0.35, 0.015, progress);
-        const lineWidth = lerp(isMobile ? 6 : 10, 0.8, progress);
+        const lineWidth = lerp(10, 0.8, progress);
 
         for (let a = 0; a < armCount; a++) {
           const armAngle = (a / armCount) * Math.PI * 2;
           const spiralTwist = easedProgress * Math.PI * 2.5;
-          const arcLength = Math.PI * (isMobile ? 0.35 : 0.42);
+          const arcLength = Math.PI * 0.42;
 
           ctx.beginPath();
           ctx.arc(0, 0, radius, armAngle + spiralTwist, armAngle + spiralTwist + arcLength);
@@ -316,7 +283,7 @@ export function WormholeBackground() {
       }
 
       // Enhanced center core with multiple layers
-      const coreSize = maxRadius * (isMobile ? 0.1 : 0.11);
+      const coreSize = maxRadius * 0.11;
       const coreHue = 275 + Math.sin(time * 0.0015) * 35;
 
       // Outer core halo
@@ -429,10 +396,10 @@ export function WormholeBackground() {
         const baseAlpha = (1 - star.depth) * star.brightness;
         const twinkle = 0.5 + Math.sin(time * 0.006 + star.offset) * 0.5;
         const alpha = Math.min(baseAlpha * twinkle, 1);
-        const size = star.size * (2.2 - star.depth) * (isMobile ? 0.9 : 1.1);
+        const size = star.size * (2.2 - star.depth) * 1.1;
 
         // Soft glow
-        const glowSize = size * (isMobile ? 5 : 7);
+        const glowSize = size * 7;
         const glow = ctx.createRadialGradient(x, y, 0, x, y, glowSize);
         glow.addColorStop(0, `hsla(${star.hue}, 100%, 98%, ${alpha})`);
         glow.addColorStop(0.12, `hsla(${star.hue}, 95%, 85%, ${alpha * 0.75})`);
@@ -458,7 +425,7 @@ export function WormholeBackground() {
     const drawCenterFlare = () => {
       const cx = width / 2;
       const cy = height / 2;
-      const flareSize = Math.min(width, height) * (isPortrait ? 0.35 : 0.4);
+      const flareSize = Math.min(width, height) * 0.4;
 
       const pulse = 0.75 + Math.sin(time * 0.002) * 0.25;
       const hue = 275 + Math.sin(time * 0.0008) * 25;
@@ -467,7 +434,7 @@ export function WormholeBackground() {
       ctx.globalCompositeOperation = 'screen';
 
       // Cross flare beams
-      const beamWidth = isMobile ? 4 : 6;
+      const beamWidth = 6;
       
       // Vertical beam
       const vGradient = ctx.createLinearGradient(cx, cy - flareSize, cx, cy + flareSize);
@@ -492,21 +459,19 @@ export function WormholeBackground() {
       ctx.fillRect(cx - flareSize, cy - beamWidth / 2 + 1, flareSize * 2, beamWidth - 2);
 
       // Diagonal rays (subtle)
-      if (!isMobile) {
-        const rayAlpha = 0.025 * pulse;
-        ctx.strokeStyle = `hsla(${hue + 15}, 100%, 90%, ${rayAlpha})`;
-        ctx.lineWidth = 2;
-        ctx.lineCap = 'round';
-        
-        const rayLen = flareSize * 0.7;
-        const angles = [Math.PI / 4, -Math.PI / 4, Math.PI * 3 / 4, -Math.PI * 3 / 4];
-        
-        for (const angle of angles) {
-          ctx.beginPath();
-          ctx.moveTo(cx, cy);
-          ctx.lineTo(cx + Math.cos(angle) * rayLen, cy + Math.sin(angle) * rayLen);
-          ctx.stroke();
-        }
+      const rayAlpha = 0.025 * pulse;
+      ctx.strokeStyle = `hsla(${hue + 15}, 100%, 90%, ${rayAlpha})`;
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      
+      const rayLen = flareSize * 0.7;
+      const angles = [Math.PI / 4, -Math.PI / 4, Math.PI * 3 / 4, -Math.PI * 3 / 4];
+      
+      for (const angle of angles) {
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + Math.cos(angle) * rayLen, cy + Math.sin(angle) * rayLen);
+        ctx.stroke();
       }
 
       ctx.restore();
@@ -527,12 +492,8 @@ export function WormholeBackground() {
     };
 
     const render = () => {
-      const dt = isMobile ? 18 : 16;
+      const dt = 16;
       time += dt;
-      
-      // Reset transform for clean slate
-      const dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       // Layer rendering
       drawBackground();
@@ -547,30 +508,29 @@ export function WormholeBackground() {
       raf = requestAnimationFrame(render);
     };
 
-    // Debounced resize handler
+    // Debounced resize handler for scaling only
     let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
     const debouncedResize = () => {
       if (resizeTimeout) clearTimeout(resizeTimeout);
-      resizeTimeout = setTimeout(resize, 100);
+      resizeTimeout = setTimeout(setupCanvas, 100);
     };
 
     // Initial setup
-    resize();
+    setupCanvas();
+    initParticles();
     render();
 
-    // Event listeners
+    // Event listeners for scaling
     window.addEventListener('resize', debouncedResize);
-    window.visualViewport?.addEventListener('resize', debouncedResize);
     window.addEventListener('orientationchange', () => {
-      // Delay for orientation animation
-      setTimeout(resize, 200);
+      setTimeout(setupCanvas, 200);
     });
 
     return () => {
       if (raf) cancelAnimationFrame(raf);
       if (resizeTimeout) clearTimeout(resizeTimeout);
       window.removeEventListener('resize', debouncedResize);
-      window.visualViewport?.removeEventListener('resize', debouncedResize);
+      window.removeEventListener('orientationchange', debouncedResize);
     };
   }, []);
 
@@ -578,12 +538,11 @@ export function WormholeBackground() {
     <canvas
       ref={canvasRef}
       aria-hidden="true"
-      className="fixed inset-0 -z-10 w-full"
+      className="absolute -z-10"
       style={{
-        height: '100dvh',
-        minHeight: '100vh',
         touchAction: 'none',
         WebkitTouchCallout: 'none',
+        transformOrigin: 'center center',
       }}
     />
   );
