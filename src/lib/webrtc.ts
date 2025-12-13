@@ -303,25 +303,28 @@ export class WebRTCFileTransfer {
           const waitForBufferDrain = () => {
             const bufferedAmount = this.dataChannel?.bufferedAmount || 0;
             if (bufferedAmount === 0) {
-              // Buffer drained, now wait for receiver ACK
-              let ackReceived = false;
-              
-              // Listen for receive_completed ACK from receiver
-              const ackHandler = () => {
-                ackReceived = true;
-                this.onComplete?.();
-                resolve();
-              };
-              this.signaling.on('receive_completed', ackHandler);
-              
-              // Timeout fallback (30 seconds) in case ACK is lost
+              // Buffer drained - add delay for network transmission before waiting for ACK
+              // bufferedAmount === 0 only means data left sender buffer, not that it arrived at receiver
               setTimeout(() => {
-                if (!ackReceived) {
-                  this.signaling.off && this.signaling.off('receive_completed', ackHandler);
+                let ackReceived = false;
+                
+                // Listen for receive_completed ACK from receiver
+                const ackHandler = () => {
+                  ackReceived = true;
                   this.onComplete?.();
                   resolve();
-                }
-              }, 30000);
+                };
+                this.signaling.on('receive_completed', ackHandler);
+                
+                // Timeout fallback (30 seconds) in case ACK is lost
+                setTimeout(() => {
+                  if (!ackReceived) {
+                    this.signaling.off && this.signaling.off('receive_completed', ackHandler);
+                    this.onComplete?.();
+                    resolve();
+                  }
+                }, 30000);
+              }, 2000); // 2 second delay for network transmission
             } else {
               // Still buffering, check again
               setTimeout(waitForBufferDrain, 50);
