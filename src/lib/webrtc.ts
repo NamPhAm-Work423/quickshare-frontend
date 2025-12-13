@@ -15,6 +15,7 @@ export interface TransferProgress {
 export class WebRTCFileTransfer {
   private pc: RTCPeerConnection | null = null;
   private dataChannel: RTCDataChannel | null = null;
+  private readonly MAX_BUFFER_SIZE = 64 * 1024; // 64KB buffer limit
   private signaling: SignalingClient;
   private iceServers: RTCConfiguration;
   private onProgress?: (progress: TransferProgress) => void;
@@ -269,78 +270,121 @@ export class WebRTCFileTransfer {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
 
+      // Handle channel errors/close during transfer
+      const errorHandler = (event: Event) => {
+        const error = event instanceof ErrorEvent ? event.error : new Error('Data channel error');
+        reject(error);
+        cleanupListeners();
+      };
+      
+      const closeHandler = () => {
+        reject(new Error('Data channel closed unexpectedly'));
+        cleanupListeners();
+      };
+
+      const cleanupListeners = () => {
+        this.dataChannel?.removeEventListener('error', errorHandler);
+        this.dataChannel?.removeEventListener('close', closeHandler);
+      };
+
+      this.dataChannel?.addEventListener('error', errorHandler);
+      this.dataChannel?.addEventListener('close', closeHandler);
+
       reader.onload = (e) => {
         if (!e.target?.result) {
           reject(new Error('Failed to read file chunk'));
+          cleanupListeners();
           return;
         }
 
-        const chunk = e.target.result as ArrayBuffer;
-        this.dataChannel?.send(chunk);
-        offset += chunk.byteLength;
+        try {
+          const chunk = e.target.result as ArrayBuffer;
+          this.dataChannel?.send(chunk);
+          offset += chunk.byteLength;
 
-        // Report progress
-        const percent = (offset / file.size) * 100;
-        const bytesTransferred = offset;
-
-        this.onProgress?.({ percent, bytesTransferred });
-
-        this.signaling.send({
-          type: 'transfer_progress',
-          percent,
-          bytes_transferred: bytesTransferred,
-        });
-
-        if (offset < file.size) {
-          // Read next chunk
-          const slice = file.slice(offset, offset + CHUNK_SIZE);
-          reader.readAsArrayBuffer(slice);
-        } else {
-          this.isTransferComplete = true;
-          this.signaling.send({ type: 'transfer_completed' });
+          // Report progress
+          const percent = (offset / file.size) * 100;
+          const bytesTransferred = offset;
           
-          // Wait for buffer to drain first
-          const waitForBufferDrain = () => {
-            const bufferedAmount = this.dataChannel?.bufferedAmount || 0;
-            if (bufferedAmount === 0) {
-              // Buffer drained - add delay for network transmission before waiting for ACK
-              // bufferedAmount === 0 only means data left sender buffer, not that it arrived at receiver
-              setTimeout(() => {
-                let ackReceived = false;
-                
-                // Listen for receive_completed ACK from receiver
-                const ackHandler = () => {
-                  ackReceived = true;
-                  this.onComplete?.();
-                  resolve();
-                };
-                this.signaling.on('receive_completed', ackHandler);
-                
-                // Timeout fallback (30 seconds) in case ACK is lost
+          this.signaling.send({
+            type: 'transfer_progress',
+            percent,
+            bytes_transferred: bytesTransferred,
+          });
+
+          this.onProgress?.({
+            percent,
+            bytesTransferred,
+          });
+          
+          if (offset < file.size) {
+            if (this.dataChannel.bufferedAmount > this.MAX_BUFFER_SIZE) {
+              const onBufferedAmountLow = () => {
+                this.dataChannel?.removeEventListener('bufferedamountlow', onBufferedAmountLow);
+                readNextChunk();
+              };
+              this.dataChannel.addEventListener('bufferedamountlow', onBufferedAmountLow);
+            } else {
+              readNextChunk();
+            }
+          } else {
+            this.isTransferComplete = true;
+            this.signaling.send({ type: 'transfer_completed' });
+            
+            // Wait for buffer to drain first
+            const waitForBufferDrain = () => {
+              const bufferedAmount = this.dataChannel?.bufferedAmount || 0;
+              if (bufferedAmount === 0) {
+                // Buffer drained - add delay for network transmission before waiting for ACK
+                // bufferedAmount === 0 only means data left sender buffer, not that it arrived at receiver
                 setTimeout(() => {
-                  if (!ackReceived) {
-                    this.signaling.off && this.signaling.off('receive_completed', ackHandler);
+                  let ackReceived = false;
+                  
+                  // Listen for receive_completed ACK from receiver
+                  const ackHandler = () => {
+                    ackReceived = true;
+                    cleanupListeners();
                     this.onComplete?.();
                     resolve();
-                  }
-                }, 30000);
-              }, 2000); // 2 second delay for network transmission
-            } else {
-              // Still buffering, check again
-              setTimeout(waitForBufferDrain, 50);
-            }
-          };
-          waitForBufferDrain();
+                  };
+                  this.signaling.on('receive_completed', ackHandler);
+                  
+                  // Timeout fallback (30 seconds) in case ACK is lost
+                  setTimeout(() => {
+                    if (!ackReceived) {
+                      this.signaling.off && this.signaling.off('receive_completed', ackHandler);
+                      cleanupListeners();
+                      this.onComplete?.();
+                      resolve();
+                    }
+                  }, 30000);
+                }, 2000); // 2 second delay for network transmission
+              } else {
+                // Still buffering, check again
+                setTimeout(waitForBufferDrain, 50);
+              }
+            };
+            waitForBufferDrain();
+          }
+        } catch (error) {
+          reject(error instanceof Error ? error : new Error('Failed to send chunk'));
+          cleanupListeners();
+          return;
         }
       };
 
       reader.onerror = () => {
         reject(new Error('Failed to read file'));
+        cleanupListeners();
+      };
+
+      const readNextChunk = () => {
+        const slice = file.slice(offset, offset + CHUNK_SIZE);
+        reader.readAsArrayBuffer(slice);
       };
 
       // Start reading
-      const slice = file.slice(offset, offset + CHUNK_SIZE);
-      reader.readAsArrayBuffer(slice);
+      readNextChunk();
     });
   }
 
