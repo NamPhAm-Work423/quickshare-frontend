@@ -191,7 +191,7 @@ export default function UploadPage() {
           </Button>
         </div>
 
-        <UploadBox onUpload={handleUpload} isUploading={isUploading} />
+        {!code && <UploadBox onUpload={handleUpload} isUploading={isUploading} />}
 
         <ViewContentDialog
           open={showViewDialog}
