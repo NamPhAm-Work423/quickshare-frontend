@@ -68,7 +68,7 @@ export function CodeDisplay({ code }: CodeDisplayProps) {
   };
 
   return (
-    <Card>
+    <Card className="overflow-hidden border border-white/10 bg-white/5 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
       <CardHeader>
         <CardTitle>Mã chuyển file của bạn</CardTitle>
         <CardDescription>Chia sẻ mã này với người nhận</CardDescription>

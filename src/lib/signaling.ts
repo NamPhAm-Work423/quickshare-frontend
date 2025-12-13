@@ -10,6 +10,7 @@ export class SignalingClient {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
+  private shouldReconnect = true;
 
   constructor(sessionId: string, clientId: string, wsUrl: string, token?: string) {
     this.sessionId = sessionId;
@@ -24,7 +25,6 @@ export class SignalingClient {
         this.ws = new WebSocket(this.wsUrl);
 
         this.ws.onopen = () => {
-          console.log('WebSocket connected');
           this.reconnectAttempts = 0;
           resolve();
         };
@@ -44,7 +44,6 @@ export class SignalingClient {
         };
 
         this.ws.onclose = () => {
-          console.log('WebSocket closed');
           this.ws = null;
           this.attemptReconnect();
         };
@@ -55,11 +54,10 @@ export class SignalingClient {
   }
 
   private attemptReconnect() {
-    if (this.reconnectAttempts < this.maxReconnectAttempts) {
+    if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
       setTimeout(() => {
-        console.log(`Reconnecting... (attempt ${this.reconnectAttempts})`);
-        this.connect().catch(console.error);
+        this.connect().catch(() => {});
       }, this.reconnectDelay * this.reconnectAttempts);
     }
   }
@@ -97,6 +95,7 @@ export class SignalingClient {
   }
 
   disconnect(): void {
+    this.shouldReconnect = false;
     if (this.ws) {
       this.ws.close();
       this.ws = null;

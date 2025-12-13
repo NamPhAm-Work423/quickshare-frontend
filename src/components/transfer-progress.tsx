@@ -29,7 +29,7 @@ export function TransferProgress({
   };
 
   return (
-    <Card>
+    <Card className="overflow-hidden border border-white/10 bg-white/5 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
       <CardContent className="pt-6 space-y-4">
         <div className="flex items-center gap-3">
           {status === 'connecting' && <Loader className="h-5 w-5" />}

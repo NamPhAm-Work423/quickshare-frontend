@@ -70,42 +70,20 @@ export default function UploadPage() {
         const fileToUpload = filesToUpload[0];
         useAppStore.getState().setFile(fileToUpload);
 
-        // Create session first to get code
-        const sessionResponse = await createSession({
-          single_use: true,
-          metadata: {
-            file_name: fileToUpload.name,
-            file_size: fileToUpload.size,
-            file_type: fileToUpload.type,
-          },
-        });
-
-        setCode(sessionResponse.code);
-        setExpirationTime(new Date(Date.now() + 10 * 60 * 1000)); // 10 minutes default
-
-        // Convert ICE servers
-        const iceServers: RTCConfiguration = {
-          iceServers: sessionResponse.ice_servers.ice_servers.map((server) => ({
-            urls: server.urls,
-            username: server.username,
-            credential: server.credential,
-          })),
-        };
-
-        setSession(
-          sessionResponse.session_id,
-          crypto.randomUUID(),
-          sessionResponse.ws_url,
-          iceServers
-        );
-
-        // Start P2P upload
-        setTransferStatus('transferring');
+        // Start P2P upload - it will create session and notify via callback
+        setTransferStatus('connecting');
         await startP2PUpload({
           file: fileToUpload,
+          onSessionCreated: (sessionInfo) => {
+            setCode(sessionInfo.code);
+            setExpirationTime(sessionInfo.expiresAt);
+            // Clear file preview sau khi tạo mã
+            setSelectedFiles([]);
+          },
           onProgress: (progress) => {
             setTransferProgress(progress);
             setUploadProgress(progress);
+            setTransferStatus('transferring');
           },
           onComplete: () => {
             setTransferStatus('completed');
@@ -126,44 +104,22 @@ export default function UploadPage() {
           },
         });
       } else if (textToUpload) {
-        // Text sharing - create session but note: P2P is for files
-        // For text, we could still use P2P by converting to blob
+        // Text sharing via P2P by converting to blob/file
         const textBlob = new Blob([textToUpload], { type: 'text/plain' });
         const textFile = new File([textBlob], 'text.txt', { type: 'text/plain' });
 
-        const sessionResponse = await createSession({
-          single_use: true,
-          metadata: {
-            file_name: 'text.txt',
-            file_size: textBlob.size,
-            file_type: 'text/plain',
-          },
-        });
-
-        setCode(sessionResponse.code);
-        setExpirationTime(new Date(Date.now() + 10 * 60 * 1000));
-
-        const iceServers: RTCConfiguration = {
-          iceServers: sessionResponse.ice_servers.ice_servers.map((server) => ({
-            urls: server.urls,
-            username: server.username,
-            credential: server.credential,
-          })),
-        };
-
-        setSession(
-          sessionResponse.session_id,
-          crypto.randomUUID(),
-          sessionResponse.ws_url,
-          iceServers
-        );
-
-        setTransferStatus('transferring');
+        setTransferStatus('connecting');
         await startP2PUpload({
           file: textFile,
+          onSessionCreated: (sessionInfo) => {
+            setCode(sessionInfo.code);
+            setExpirationTime(sessionInfo.expiresAt);
+            setSelectedFiles([]);
+          },
           onProgress: (progress) => {
             setTransferProgress(progress);
             setUploadProgress(progress);
+            setTransferStatus('transferring');
           },
           onComplete: () => {
             setTransferStatus('completed');
@@ -281,41 +237,42 @@ export default function UploadPage() {
 
         {code && (
           <div className="space-y-4">
-            {/* Hiển thị preview file/text đã upload */}
-            {selectedFiles.length > 0 ? (
-              <div className="space-y-2">
-                {selectedFiles.map((f, index) => (
-                  <FilePreview key={`${f.name}-${index}`} file={f} />
-                ))}
-              </div>
-            ) : file ? (
-              <FilePreview file={file} />
-            ) : null}
-            {text && selectedFiles.length === 0 && !file && (
-              <div className="rounded-lg border bg-muted/50 p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">Nội dung văn bản đã upload</span>
-                </div>
-                <p className="text-sm text-muted-foreground line-clamp-3">
-                  {text.substring(0, 200)}
-                  {text.length > 200 && '...'}
-                </p>
-              </div>
-            )}
-            
+            {/* Code Display - hiển thị đầu tiên và nổi bật */}
             <CodeDisplay code={code} />
+            
+            {/* Countdown Timer */}
             {expirationTime && (
               <div className="flex justify-center">
                 <CountdownTimer expirationTime={expirationTime} />
               </div>
             )}
+            
+            {/* Transfer Status */}
+            {(transferStatus === 'connecting' || transferStatus === 'transferring') && (
+              <TransferProgress
+                progress={storeTransferProgress}
+                status={transferStatus}
+                fileName={file?.name}
+                fileSize={file?.size}
+              />
+            )}
+            
+            {transferStatus === 'completed' && (
+              <div className="rounded-lg border border-green-500 bg-green-500/10 p-4 text-center">
+                <p className="text-sm text-green-600 dark:text-green-400 font-medium">
+                  ✓ Đã gửi thành công!
+                </p>
+              </div>
+            )}
+            
+            {/* Reset Button */}
             <Button
               variant="outline"
               className="w-full"
               onClick={() => {
                 resetUpload();
                 setSelectedFiles([]);
+                setTransferStatus('idle');
                 toast({
                   title: 'Reset',
                   description: 'Ready for a new upload',

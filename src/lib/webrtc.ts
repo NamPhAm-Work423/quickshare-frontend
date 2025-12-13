@@ -20,6 +20,12 @@ export class WebRTCFileTransfer {
   private onProgress?: (progress: TransferProgress) => void;
   private onComplete?: () => void;
   private onError?: (error: string) => void;
+  private onDataChannelOpen?: () => void;
+  private onFileReceived?: (file: File, metadata: FileMetadata) => void;
+  private receivedChunks: Uint8Array[] = [];
+  private fileMetadata: { totalSize: number; fileName: string; fileType: string } | null = null;
+  private isCleaningUp: boolean = false;
+  private isTransferComplete: boolean = false;
 
   constructor(
     signaling: SignalingClient,
@@ -28,6 +34,7 @@ export class WebRTCFileTransfer {
       onProgress?: (progress: TransferProgress) => void;
       onComplete?: () => void;
       onError?: (error: string) => void;
+      onDataChannelOpen?: () => void;
     }
   ) {
     this.signaling = signaling;
@@ -35,6 +42,7 @@ export class WebRTCFileTransfer {
     this.onProgress = callbacks?.onProgress;
     this.onComplete = callbacks?.onComplete;
     this.onError = callbacks?.onError;
+    this.onDataChannelOpen = callbacks?.onDataChannelOpen;
 
     this.setupSignalingHandlers();
   }
@@ -53,11 +61,10 @@ export class WebRTCFileTransfer {
     });
 
     this.signaling.on('peer_connected', () => {
-      console.log('Peer connected');
+      // Peer connected
     });
 
     this.signaling.on('peer_disconnected', () => {
-      console.log('Peer disconnected');
       this.cleanup();
     });
   }
@@ -154,17 +161,84 @@ export class WebRTCFileTransfer {
 
   private setupDataChannel(channel: RTCDataChannel): void {
     channel.onopen = () => {
-      console.log('Data channel opened');
+      this.onDataChannelOpen?.();
     };
 
     channel.onerror = (error) => {
-      console.error('Data channel error:', error);
-      this.onError?.('Data channel error');
+      if (!this.isCleaningUp && !this.isTransferComplete) {
+        console.error('Data channel error:', error);
+        this.onError?.('Data channel error');
+      } else {
+        // Data channel closed during cleanup (expected)
+      }
     };
 
     channel.onclose = () => {
-      console.log('Data channel closed');
+      // Data channel closed
     };
+
+    // Setup file reception handlers if callback was registered
+    if (this.onFileReceived) {
+      this.setupFileReceptionHandlers(channel);
+    }
+  }
+
+  private setupFileReceptionHandlers(channel: RTCDataChannel): void {
+    // Listen for metadata
+    this.signaling.on('transfer_started', (msg) => {
+      this.fileMetadata = {
+        totalSize: msg.file_size,
+        fileName: msg.file_name,
+        fileType: msg.file_type || 'application/octet-stream',
+      };
+      this.receivedChunks = [];
+    });
+
+    // Listen for progress updates
+    this.signaling.on('transfer_progress', (msg) => {
+      this.onProgress?.({
+        percent: msg.percent,
+        bytesTransferred: msg.bytes_transferred,
+      });
+    });
+
+    // Receive file chunks
+    channel.onmessage = (event) => {
+      if (event.data instanceof ArrayBuffer) {
+        this.receivedChunks.push(new Uint8Array(event.data));
+
+        // Check if transfer is complete
+        const receivedSize = this.receivedChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+
+        if (this.fileMetadata && receivedSize >= this.fileMetadata.totalSize) {
+          // Mark as complete immediately to suppress errors from peer closing
+          this.isTransferComplete = true;
+          
+          // Reconstruct file
+          const allChunks = new Uint8Array(receivedSize);
+          let position = 0;
+          for (const chunk of this.receivedChunks) {
+            allChunks.set(chunk, position);
+            position += chunk.length;
+          }
+
+          const blob = new Blob([allChunks], { type: this.fileMetadata.fileType });
+          const file = new File([blob], this.fileMetadata.fileName, { type: this.fileMetadata.fileType });
+
+          this.onFileReceived?.(file, {
+            name: this.fileMetadata.fileName,
+            size: this.fileMetadata.totalSize,
+            type: this.fileMetadata.fileType,
+          });
+
+          this.onComplete?.();
+        }
+      }
+    };
+
+    this.signaling.on('transfer_completed', () => {
+      // Transfer completed
+    });
   }
 
   async sendFile(file: File): Promise<void> {
@@ -213,10 +287,24 @@ export class WebRTCFileTransfer {
           const slice = file.slice(offset, offset + CHUNK_SIZE);
           reader.readAsArrayBuffer(slice);
         } else {
-          // Transfer complete
+          this.isTransferComplete = true;
           this.signaling.send({ type: 'transfer_completed' });
-          this.onComplete?.();
-          resolve();
+          
+          // Wait for buffer to drain or timeout
+          const waitForDelivery = () => {
+            const bufferedAmount = this.dataChannel?.bufferedAmount || 0;
+            if (bufferedAmount === 0) {
+              // All data sent, give receiver a moment to process
+              setTimeout(() => {
+                this.onComplete?.();
+                resolve();
+              }, 200);
+            } else {
+              // Still buffering, check again
+              setTimeout(waitForDelivery, 50);
+            }
+          };
+          waitForDelivery();
         }
       };
 
@@ -233,69 +321,19 @@ export class WebRTCFileTransfer {
   receiveFile(
     onFileReceived: (file: File, metadata: FileMetadata) => void
   ): void {
-    if (!this.dataChannel) {
-      throw new Error('Data channel is not available');
+    // Store the callback - handlers will be set up when data channel is ready
+    this.onFileReceived = onFileReceived;
+
+    // If data channel is already available, set up handlers immediately
+    if (this.dataChannel) {
+      this.setupFileReceptionHandlers(this.dataChannel);
     }
-
-    let receivedChunks: Uint8Array[] = [];
-    let totalSize = 0;
-    let fileName = '';
-    let fileType = '';
-    let metadataReceived = false;
-
-    // Listen for metadata
-    this.signaling.on('transfer_started', (msg) => {
-      totalSize = msg.file_size;
-      fileName = msg.file_name;
-      fileType = msg.file_type || 'application/octet-stream';
-      metadataReceived = true;
-    });
-
-    // Listen for progress updates
-    this.signaling.on('transfer_progress', (msg) => {
-      this.onProgress?.({
-        percent: msg.percent,
-        bytesTransferred: msg.bytes_transferred,
-      });
-    });
-
-    // Receive file chunks
-    this.dataChannel.onmessage = (event) => {
-      if (event.data instanceof ArrayBuffer) {
-        receivedChunks.push(new Uint8Array(event.data));
-
-        // Check if transfer is complete
-        const receivedSize = receivedChunks.reduce((sum, chunk) => sum + chunk.length, 0);
-
-        if (metadataReceived && receivedSize >= totalSize) {
-          // Reconstruct file
-          const allChunks = new Uint8Array(receivedSize);
-          let position = 0;
-          for (const chunk of receivedChunks) {
-            allChunks.set(chunk, position);
-            position += chunk.length;
-          }
-
-          const blob = new Blob([allChunks], { type: fileType });
-          const file = new File([blob], fileName, { type: fileType });
-
-          onFileReceived(file, {
-            name: fileName,
-            size: totalSize,
-            type: fileType,
-          });
-
-          this.onComplete?.();
-        }
-      }
-    };
-
-    this.signaling.on('transfer_completed', () => {
-      console.log('Transfer completed');
-    });
+    // Otherwise, handlers will be set up in setupDataChannel when the channel is created
   }
 
   cleanup(): void {
+    this.isCleaningUp = true;
+    
     if (this.dataChannel) {
       this.dataChannel.close();
       this.dataChannel = null;

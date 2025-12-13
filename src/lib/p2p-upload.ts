@@ -8,10 +8,11 @@ export interface P2PUploadOptions {
   onProgress?: (progress: number) => void;
   onComplete?: () => void;
   onError?: (error: string) => void;
+  onSessionCreated?: (sessionInfo: { code: string; sessionId: string; expiresAt: Date }) => void;
 }
 
 export async function startP2PUpload(options: P2PUploadOptions) {
-  const { file, onProgress, onComplete, onError } = options;
+  const { file, onProgress, onComplete, onError, onSessionCreated } = options;
 
   if (!file) {
     throw new Error('File is required');
@@ -29,6 +30,13 @@ export async function startP2PUpload(options: P2PUploadOptions) {
     };
 
     const sessionResponse = await createSession(createRequest);
+
+    // Notify caller about session created (for UI to display code)
+    onSessionCreated?.({
+      code: sessionResponse.code,
+      sessionId: sessionResponse.session_id,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+    });
 
     // Generate client ID
     const clientId = crypto.randomUUID();
@@ -51,50 +59,59 @@ export async function startP2PUpload(options: P2PUploadOptions) {
 
     await signaling.connect();
 
-    // Initialize WebRTC as sender
-    const webrtc = new WebRTCFileTransfer(signaling, iceServers, {
-      onProgress: (progress) => {
-        onProgress?.(progress.percent);
-      },
-      onComplete: () => {
-        onComplete?.();
-        webrtc.cleanup();
-        signaling.disconnect();
-      },
-      onError: (error) => {
-        onError?.(error);
-        webrtc.cleanup();
-        signaling.disconnect();
-      },
-    });
-
-    await webrtc.initializeAsSender();
-
-    // Wait for peer connection
+    // Wait for peer to connect, then start WebRTC handshake and file transfer
     return new Promise<void>((resolve, reject) => {
-      let peerConnected = false;
+      let dataChannelOpened = false;
+      let webrtc: WebRTCFileTransfer | null = null;
 
-      signaling.on('peer_connected', () => {
-        peerConnected = true;
-        // Start sending file
-        webrtc
-          .sendFile(file)
-          .then(() => {
-            resolve();
-          })
-          .catch((err) => {
-            reject(err);
-          });
+      // Listen for when receiver joins the session
+      signaling.on('peer_connected', async () => {
+        
+        // Create WebRTC with onDataChannelOpen callback
+        webrtc = new WebRTCFileTransfer(signaling, iceServers, {
+          onProgress: (progress) => {
+            onProgress?.(progress.percent);
+          },
+          onComplete: () => {
+            onComplete?.();
+            webrtc?.cleanup();
+            signaling.disconnect();
+          },
+          onError: (error) => {
+            onError?.(error);
+            webrtc?.cleanup();
+            signaling.disconnect();
+          },
+          onDataChannelOpen: () => {
+            dataChannelOpened = true;
+            // Start sending file when data channel is ready
+            webrtc
+              ?.sendFile(file)
+              .then(() => {
+                resolve();
+              })
+              .catch((err) => {
+                reject(err);
+              });
+          },
+        });
+
+        // Now send the offer (receiver is ready to receive it)
+        try {
+          await webrtc.initializeAsSender();
+        } catch (err) {
+          reject(err);
+        }
       });
 
-      // Timeout after 30 seconds
+      // Timeout after 60 seconds (peer connection + data channel)
       setTimeout(() => {
-        if (!peerConnected) {
-          reject(new Error('Peer connection timeout'));
-          webrtc.cleanup();
+        if (!dataChannelOpened) {
+          reject(new Error('Connection timeout - no peer connected or data channel failed'));
+          webrtc?.cleanup();
           signaling.disconnect();
         }
-      }, 30000);
+      }, 60000);
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Upload failed';
@@ -134,7 +151,7 @@ export async function startP2PReceive(options: P2PReceiveOptions) {
     // The ws_url already includes session_id and client_id, we just need to add token
     const wsUrlWithToken = joinResponse.ws_url.includes('token=')
       ? joinResponse.ws_url
-      : `${joinResponse.ws_url}&token=${joinResponse.ws_token}`;
+      : `${joinResponse.ws_url}&token=${encodeURIComponent(joinResponse.ws_token)}`;
     const signaling = new SignalingClient(
       joinResponse.session_id,
       clientId,
@@ -143,35 +160,40 @@ export async function startP2PReceive(options: P2PReceiveOptions) {
 
     await signaling.connect();
 
-    // Initialize WebRTC as receiver
-    const webrtc = new WebRTCFileTransfer(signaling, iceServers, {
-      onProgress: (progress) => {
-        onProgress?.(progress.percent);
-      },
-      onComplete: () => {
+    // Wait for file transfer to complete
+    return new Promise<void>((resolve, reject) => {
+      // Initialize WebRTC as receiver
+      const webrtc = new WebRTCFileTransfer(signaling, iceServers, {
+        onProgress: (progress) => {
+          onProgress?.(progress.percent);
+        },
+        onComplete: () => {
+          webrtc.cleanup();
+          signaling.disconnect();
+          resolve();
+        },
+        onError: (error) => {
+          onError?.(error);
+          webrtc.cleanup();
+          signaling.disconnect();
+          reject(new Error(error));
+        },
+      });
+
+      webrtc.initializeAsReceiver().then(() => {
+        // Set up file reception
+        webrtc.receiveFile((file, metadata) => {
+          onFileReceived(file);
+        });
+      }).catch(reject);
+
+      // Timeout after 5 minutes for large files
+      setTimeout(() => {
+        reject(new Error('File transfer timeout'));
         webrtc.cleanup();
         signaling.disconnect();
-      },
-      onError: (error) => {
-        onError?.(error);
-        webrtc.cleanup();
-        signaling.disconnect();
-      },
+      }, 5 * 60 * 1000);
     });
-
-    await webrtc.initializeAsReceiver();
-
-    // Set up file reception
-    webrtc.receiveFile((file, metadata) => {
-      onFileReceived(file);
-    });
-
-    return {
-      sessionId: joinResponse.session_id,
-      clientId,
-      signaling,
-      webrtc,
-    };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Receive failed';
     onError?.(errorMessage);
