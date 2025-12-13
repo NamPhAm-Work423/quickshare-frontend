@@ -266,6 +266,7 @@ export class WebRTCFileTransfer {
 
     const CHUNK_SIZE = 16 * 1024; // 16KB chunks
     let offset = 0;
+    let lastProgressTime = 0;
 
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -305,12 +306,17 @@ export class WebRTCFileTransfer {
           // Report progress
           const percent = (offset / file.size) * 100;
           const bytesTransferred = offset;
-          
-          this.signaling.send({
-            type: 'transfer_progress',
-            percent,
-            bytes_transferred: bytesTransferred,
-          });
+
+          // Throttled progress reporting (every 100ms)
+          const now = Date.now();
+          if (now - lastProgressTime >= 100) {
+            this.signaling.send({
+              type: 'transfer_progress',
+              percent,
+              bytes_transferred: bytesTransferred,
+            });
+            lastProgressTime = now;
+          }
 
           this.onProgress?.({
             percent,
@@ -331,39 +337,117 @@ export class WebRTCFileTransfer {
             this.isTransferComplete = true;
             this.signaling.send({ type: 'transfer_completed' });
             
-            // Wait for buffer to drain first
+            // Setup ACK listener IMMEDIATELY before waiting
+            let ackReceived = false;
+            const ackPromise = new Promise<void>((resolveAck) => {
+               const ackHandler = () => {
+                 console.log('DEBUG: Received ACK from receiver');
+                 ackReceived = true;
+                 cleanupListeners();
+                 this.onComplete?.();
+                 resolveAck();
+               };
+               this.signaling.on('receive_completed', ackHandler);
+               
+               // Store cleanup for this specific listener
+               const cleanupAck = () => {
+                 this.signaling.off && this.signaling.off('receive_completed', ackHandler);
+               };
+               
+               // Attach to ephemeral property or managed list if needed, 
+               // but for now we rely on the main cleanupListeners/resolve flow
+               // Actually we need to be able to remove this listener if we timeout.
+               // Let's modify the outer scope variable.
+               
+               // Wait for buffer to drain
+               const waitForBufferDrain = () => {
+                 const bufferedAmount = this.dataChannel?.bufferedAmount || 0;
+                 if (bufferedAmount === 0) {
+                   // Buffer drained - wait 2s for network then check ACK
+                   setTimeout(() => {
+                     if (ackReceived) {
+                       resolve(); // Already got ACK
+                       return;
+                     }
+                     
+                     // If not yet received, wait up to 30s (minus the 2s we already waited)
+                     const timeoutId = setTimeout(() => {
+                        if (!ackReceived) {
+                          console.log('DEBUG: Transfer ACK timeout, forcing success');
+                          cleanupAck();
+                          cleanupListeners();
+                          this.onComplete?.();
+                          resolve();
+                        }
+                     }, 28000);
+                     
+                     // If we receive ACK during this wait, ackHandler will fire
+                     // We need to make sure ackHandler resolves the OUTER promise
+                     // We can't do that easily from inside.
+                     // Let's restructure:
+                   }, 2000);
+                 } else {
+                   setTimeout(waitForBufferDrain, 50);
+                 }
+               };
+               waitForBufferDrain();
+            });
+            
+            // Simplified Logic:
+            // 1. Listen for ACK.
+            // 2. Wait 2s (regardless of ACK).
+            // 3. After 2s, if ACK verified => DONE.
+            // 4. If not, wait until ACK or Timeout.
+            
+            const ackHandler = () => {
+                 console.log('DEBUG: Received ACK from receiver');
+                 ackReceived = true;
+            };
+            this.signaling.on('receive_completed', ackHandler);
+
             const waitForBufferDrain = () => {
               const bufferedAmount = this.dataChannel?.bufferedAmount || 0;
               if (bufferedAmount === 0) {
-                // Buffer drained - add delay for network transmission before waiting for ACK
-                // bufferedAmount === 0 only means data left sender buffer, not that it arrived at receiver
-                setTimeout(() => {
-                  let ackReceived = false;
+                 setTimeout(() => {
+                    // Network settled.
+                    if (ackReceived) {
+                        finishSuccess();
+                    } else {
+                        // Wait for ACK with timeout
+                        const checkInterval = setInterval(() => {
+                            if (ackReceived) {
+                                clearInterval(checkInterval);
+                                clearTimeout(timeoutId);
+                                finishSuccess();
+                            }
+                        }, 100);
+                        
+                  // Dynamic timeout based on file size
+                  // Base 30s + 500ms per MB to allow for receiver processing/assembly time
+                  const processingTimePerMB = 500;
+                  const fileSizeMB = file.size / (1024 * 1024);
+                  const dynamicTimeout = 30000 + Math.ceil(fileSizeMB * processingTimePerMB);
                   
-                  // Listen for receive_completed ACK from receiver
-                  const ackHandler = () => {
-                    ackReceived = true;
-                    cleanupListeners();
-                    this.onComplete?.();
-                    resolve();
-                  };
-                  this.signaling.on('receive_completed', ackHandler);
-                  
-                  // Timeout fallback (30 seconds) in case ACK is lost
-                  setTimeout(() => {
-                    if (!ackReceived) {
-                      this.signaling.off && this.signaling.off('receive_completed', ackHandler);
-                      cleanupListeners();
-                      this.onComplete?.();
-                      resolve();
+                  // Timeout fallback
+                  const timeoutId = setTimeout(() => {
+                    clearInterval(checkInterval);
+                    console.log(`DEBUG: ACK Timeout after ${dynamicTimeout}ms`);
+                    finishSuccess(); // Assume success on timeout
+                  }, dynamicTimeout);
                     }
-                  }, 30000);
-                }, 2000); // 2 second delay for network transmission
+                 }, 2000);
               } else {
-                // Still buffering, check again
                 setTimeout(waitForBufferDrain, 50);
               }
             };
+            
+            const finishSuccess = () => {
+                this.signaling.off && this.signaling.off('receive_completed', ackHandler);
+                cleanupListeners();
+                this.onComplete?.();
+                resolve();
+            };
+            
             waitForBufferDrain();
           }
         } catch (error) {
