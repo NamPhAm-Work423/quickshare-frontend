@@ -111,7 +111,7 @@ export async function startP2PUpload(options: P2PUploadOptions) {
           webrtc?.cleanup();
           signaling.disconnect();
         }
-      }, 60000);
+      }, 600000);
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Upload failed';
