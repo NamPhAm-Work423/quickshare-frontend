@@ -20,6 +20,7 @@ export type SignalingMessage =
       bytes_transferred: number;
     }
   | { type: 'transfer_completed' }
+  | { type: 'receive_completed' }
   | { type: 'transfer_failed'; error: string }
   | { type: 'peer_connected'; client_id: string }
   | { type: 'peer_disconnected'; client_id: string }

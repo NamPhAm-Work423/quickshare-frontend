@@ -231,6 +231,9 @@ export class WebRTCFileTransfer {
             type: this.fileMetadata.fileType,
           });
 
+          // Send ACK to sender that file was received completely
+          this.signaling.send({ type: 'receive_completed' });
+          
           this.onComplete?.();
         }
       }
@@ -290,21 +293,35 @@ export class WebRTCFileTransfer {
           this.isTransferComplete = true;
           this.signaling.send({ type: 'transfer_completed' });
           
-          // Wait for buffer to drain or timeout
-          const waitForDelivery = () => {
+          // Wait for buffer to drain first
+          const waitForBufferDrain = () => {
             const bufferedAmount = this.dataChannel?.bufferedAmount || 0;
             if (bufferedAmount === 0) {
-              // All data sent, give receiver a moment to process
-              setTimeout(() => {
+              // Buffer drained, now wait for receiver ACK
+              let ackReceived = false;
+              
+              // Listen for receive_completed ACK from receiver
+              const ackHandler = () => {
+                ackReceived = true;
                 this.onComplete?.();
                 resolve();
-              }, 200);
+              };
+              this.signaling.on('receive_completed', ackHandler);
+              
+              // Timeout fallback (30 seconds) in case ACK is lost
+              setTimeout(() => {
+                if (!ackReceived) {
+                  this.signaling.off && this.signaling.off('receive_completed', ackHandler);
+                  this.onComplete?.();
+                  resolve();
+                }
+              }, 30000);
             } else {
               // Still buffering, check again
-              setTimeout(waitForDelivery, 50);
+              setTimeout(waitForBufferDrain, 50);
             }
           };
-          waitForDelivery();
+          waitForBufferDrain();
         }
       };
 
