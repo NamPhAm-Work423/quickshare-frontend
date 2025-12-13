@@ -2,6 +2,7 @@ import { SignalingClient } from './signaling';
 import { SignalingMessage } from './types';
 
 export interface FileMetadata {
+  fileId: string;
   name: string;
   size: number;
   type: string;
@@ -12,21 +13,56 @@ export interface TransferProgress {
   bytesTransferred: number;
 }
 
+export enum SendState {
+  Idle = 'Idle',
+  Sending = 'Sending',
+  WaitingAck = 'WaitingAck',
+  Done = 'Done',
+}
+
+export enum ReceiveState {
+  Idle = 'Idle',
+  Receiving = 'Receiving',
+  Done = 'Done',
+}
+
+interface DCMessage {
+  type: 'transfer_started' | 'transfer_end' | 'ack';
+  fileId?: string;
+  file_name?: string;
+  file_size?: number;
+  file_type?: string;
+}
+
 export class WebRTCFileTransfer {
   private pc: RTCPeerConnection | null = null;
   private dataChannel: RTCDataChannel | null = null;
-  private readonly MAX_BUFFER_SIZE = 64 * 1024; // 64KB buffer limit
+  
+  // Strict buffer limits
+  private readonly MAX_BUFFER_SIZE = 4 * 1024 * 1024; // 4MB
+  private readonly LOW_BUFFER_THRESHOLD = 2 * 1024 * 1024; // 2MB
+
   private signaling: SignalingClient;
   private iceServers: RTCConfiguration;
+  
+  // Callbacks
   private onProgress?: (progress: TransferProgress) => void;
   private onComplete?: () => void;
   private onError?: (error: string) => void;
   private onDataChannelOpen?: () => void;
   private onFileReceived?: (file: File, metadata: FileMetadata) => void;
-  private receivedChunks: Uint8Array[] = [];
-  private fileMetadata: { totalSize: number; fileName: string; fileType: string } | null = null;
+
+  // Receiver State
+  private fileMetadata: { totalSize: number; fileName: string; fileType: string; fileId: string } | null = null;
+  private activeTransferBuffer: Uint8Array | null = null; // Pre-allocated buffer
+  private receivedBytes: number = 0;
+  private isTransferEndReceived: boolean = false;
+  
+  // State Machine
+  private sendState: SendState = SendState.Idle;
+  private receiveState: ReceiveState = ReceiveState.Idle;
+  
   private isCleaningUp: boolean = false;
-  private isTransferComplete: boolean = false;
 
   constructor(
     signaling: SignalingClient,
@@ -49,6 +85,7 @@ export class WebRTCFileTransfer {
   }
 
   private setupSignalingHandlers(): void {
+    // Signaling is ONLY for connection establishment, NOT for transfer control.
     this.signaling.on('offer', (msg) => {
       this.handleOffer(msg.sdp);
     });
@@ -61,26 +98,29 @@ export class WebRTCFileTransfer {
       this.handleIceCandidate(msg);
     });
 
-    this.signaling.on('peer_connected', () => {
-      // Peer connected
-    });
-
     this.signaling.on('peer_disconnected', () => {
       this.cleanup();
     });
   }
 
+  // ==============================================================================
+  // CONNECTION SETUP
+  // ==============================================================================
+
   async initializeAsSender(): Promise<void> {
     this.pc = new RTCPeerConnection(this.iceServers);
 
-    // Create data channel for file transfer
+    // Create data channel
     this.dataChannel = this.pc.createDataChannel('fileTransfer', {
       ordered: true,
     });
+    
+    // ENFORCE Threshold immediately
+    this.dataChannel.bufferedAmountLowThreshold = this.LOW_BUFFER_THRESHOLD;
 
     this.setupDataChannel(this.dataChannel);
 
-    // Handle ICE candidates
+    // Handle ICE
     this.pc.onicecandidate = (event) => {
       if (event.candidate) {
         this.signaling.send({
@@ -92,7 +132,7 @@ export class WebRTCFileTransfer {
       }
     };
 
-    // Create and send offer
+    // Create Offer
     const offer = await this.pc.createOffer();
     await this.pc.setLocalDescription(offer);
 
@@ -108,10 +148,11 @@ export class WebRTCFileTransfer {
     // Handle incoming data channel
     this.pc.ondatachannel = (event) => {
       this.dataChannel = event.channel;
+      // ENFORCE Threshold
+      this.dataChannel.bufferedAmountLowThreshold = this.LOW_BUFFER_THRESHOLD;
       this.setupDataChannel(this.dataChannel);
     };
 
-    // Handle ICE candidates
     this.pc.onicecandidate = (event) => {
       if (event.candidate) {
         this.signaling.send({
@@ -128,11 +169,9 @@ export class WebRTCFileTransfer {
     if (!this.pc) {
       await this.initializeAsReceiver();
     }
-
     if (!this.pc) return;
 
     await this.pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp }));
-
     const answer = await this.pc.createAnswer();
     await this.pc.setLocalDescription(answer);
 
@@ -144,19 +183,16 @@ export class WebRTCFileTransfer {
 
   private async handleAnswer(sdp: string): Promise<void> {
     if (!this.pc) return;
-
     await this.pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp }));
   }
 
   private async handleIceCandidate(msg: SignalingMessage & { type: 'ice_candidate' }): Promise<void> {
     if (!this.pc) return;
-
     const candidate = new RTCIceCandidate({
       candidate: msg.candidate,
       sdpMid: msg.sdp_mid || null,
       sdpMLineIndex: msg.sdp_mline_index || null,
     });
-
     await this.pc.addIceCandidate(candidate);
   }
 
@@ -166,328 +202,328 @@ export class WebRTCFileTransfer {
     };
 
     channel.onerror = (error) => {
-      if (!this.isCleaningUp && !this.isTransferComplete) {
-        console.error('Data channel error:', error);
+      if (!this.isCleaningUp && this.sendState !== SendState.Done && this.receiveState !== ReceiveState.Done) {
+        console.error('DataChannel Error:', error);
         this.onError?.('Data channel error');
-      } else {
-        // Data channel closed during cleanup (expected)
       }
     };
 
-    channel.onclose = () => {
-      // Data channel closed
-    };
-
-    // Setup file reception handlers if callback was registered
     if (this.onFileReceived) {
       this.setupFileReceptionHandlers(channel);
     }
   }
 
-  private setupFileReceptionHandlers(channel: RTCDataChannel): void {
-    // Listen for metadata
-    this.signaling.on('transfer_started', (msg) => {
-      console.log('DEBUG: transfer_started received', msg);
-      this.fileMetadata = {
-        totalSize: msg.file_size,
-        fileName: msg.file_name,
-        fileType: msg.file_type || 'application/octet-stream',
-      };
-      this.receivedChunks = [];
-    });
-
-    // Listen for progress updates
-    this.signaling.on('transfer_progress', (msg) => {
-      this.onProgress?.({
-        percent: msg.percent,
-        bytesTransferred: msg.bytes_transferred,
-      });
-    });
-
-    // Receive file chunks
-    channel.onmessage = (event) => {
-      if (event.data instanceof ArrayBuffer) {
-        this.receivedChunks.push(new Uint8Array(event.data));
-
-        // Check if transfer is complete
-        const receivedSize = this.receivedChunks.reduce((sum, chunk) => sum + chunk.length, 0);
-        
-        // Debug: Log every 10th chunk or when complete
-        if (this.receivedChunks.length % 10 === 0 || (this.fileMetadata && receivedSize >= this.fileMetadata.totalSize)) {
-          console.log('DEBUG: Received chunks', this.receivedChunks.length, 'size', receivedSize, 'totalSize', this.fileMetadata?.totalSize);
-        }
-
-        if (this.fileMetadata && receivedSize >= this.fileMetadata.totalSize) {
-          console.log('DEBUG: Transfer complete, reconstructing file');
-          this.isTransferComplete = true;
-          
-          // Reconstruct file
-          const allChunks = new Uint8Array(receivedSize);
-          let position = 0;
-          for (const chunk of this.receivedChunks) {
-            allChunks.set(chunk, position);
-            position += chunk.length;
-          }
-
-          const blob = new Blob([allChunks], { type: this.fileMetadata.fileType });
-          const file = new File([blob], this.fileMetadata.fileName, { type: this.fileMetadata.fileType });
-
-          this.onFileReceived?.(file, {
-            name: this.fileMetadata.fileName,
-            size: this.fileMetadata.totalSize,
-            type: this.fileMetadata.fileType,
-          });
-
-          // Send ACK to sender that file was received completely
-          this.signaling.send({ type: 'receive_completed' });
-          
-          this.onComplete?.();
-        }
-      }
-    };
-
-    this.signaling.on('transfer_completed', () => {
-      // Transfer completed
-    });
-  }
+  // ==============================================================================
+  // SENDER LOGIC
+  // ==============================================================================
 
   async sendFile(file: File): Promise<void> {
     if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
       throw new Error('Data channel is not open');
     }
 
-    // Send file metadata
-    this.signaling.send({
+    // 1. Generate ID and reset state
+    const fileId = crypto.randomUUID();
+    this.sendState = SendState.Sending;
+
+    console.log(`[Sender] Starting transfer: ${fileId} (${file.size} bytes)`);
+
+    // 2. Send Metadata via DataChannel
+    const metaMsg: DCMessage = {
       type: 'transfer_started',
+      fileId: fileId,
       file_name: file.name,
       file_size: file.size,
       file_type: file.type,
-    });
+    };
+    this.dataChannel.send(JSON.stringify(metaMsg));
 
-    const CHUNK_SIZE = 16 * 1024; // 16KB chunks
+    const CHUNK_SIZE = 16 * 1024; // 16KB
     let offset = 0;
-    let lastProgressTime = 0;
 
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
+      let ackTimeout: ReturnType<typeof setTimeout>;
 
-      // Handle channel errors/close during transfer
-      const errorHandler = (event: Event) => {
-        const error = event instanceof ErrorEvent ? event.error : new Error('Data channel error');
-        reject(error);
-        cleanupListeners();
-      };
-      
-      const closeHandler = () => {
-        reject(new Error('Data channel closed unexpectedly'));
-        cleanupListeners();
-      };
-
-      const cleanupListeners = () => {
-        this.dataChannel?.removeEventListener('error', errorHandler);
-        this.dataChannel?.removeEventListener('close', closeHandler);
-      };
-
-      this.dataChannel?.addEventListener('error', errorHandler);
-      this.dataChannel?.addEventListener('close', closeHandler);
-
-      reader.onload = (e) => {
-        if (!e.target?.result) {
-          reject(new Error('Failed to read file chunk'));
-          cleanupListeners();
-          return;
+      const cleanup = () => {
+        this.dataChannel?.removeEventListener('error', onError);
+        this.dataChannel?.removeEventListener('close', onClose);
+        this.dataChannel?.removeEventListener('message', onMessage);
+        
+        if (ackTimeout) {
+            clearTimeout(ackTimeout);
         }
+      };
 
+      const onError = (e: Event) => {
+        const err = e instanceof ErrorEvent ? e.error : new Error('DataChannel Error');
+        cleanup();
+        reject(err);
+      };
+
+      const onClose = () => {
+        cleanup();
+        reject(new Error('DataChannel closed unexpectedly'));
+      };
+
+      // 4. Handle ACK
+      const onMessage = (event: MessageEvent) => {
+        if (typeof event.data !== 'string') return;
         try {
-          const chunk = e.target.result as ArrayBuffer;
-          this.dataChannel?.send(chunk);
-          offset += chunk.byteLength;
-
-          // Report progress
-          const percent = (offset / file.size) * 100;
-          const bytesTransferred = offset;
-
-          // Throttled progress reporting (every 100ms)
-          const now = Date.now();
-          if (now - lastProgressTime >= 100) {
-            this.signaling.send({
-              type: 'transfer_progress',
-              percent,
-              bytes_transferred: bytesTransferred,
-            });
-            lastProgressTime = now;
+          const msg = JSON.parse(event.data) as DCMessage;
+          if (msg.type === 'ack' && msg.fileId === fileId) {
+             console.log('[Sender] Received ACK. Transfer complete.');
+             this.sendState = SendState.Done;
+             cleanup();
+             this.onComplete?.();
+             resolve();
           }
-
-          this.onProgress?.({
-            percent,
-            bytesTransferred,
-          });
-          
-          if (offset < file.size) {
-            if (this.dataChannel.bufferedAmount > this.MAX_BUFFER_SIZE) {
-              const onBufferedAmountLow = () => {
-                this.dataChannel?.removeEventListener('bufferedamountlow', onBufferedAmountLow);
-                readNextChunk();
-              };
-              this.dataChannel.addEventListener('bufferedamountlow', onBufferedAmountLow);
-            } else {
-              readNextChunk();
-            }
-          } else {
-            this.isTransferComplete = true;
-            this.signaling.send({ type: 'transfer_completed' });
-            
-            // Setup ACK listener IMMEDIATELY before waiting
-            let ackReceived = false;
-            const ackPromise = new Promise<void>((resolveAck) => {
-               const ackHandler = () => {
-                 console.log('DEBUG: Received ACK from receiver');
-                 ackReceived = true;
-                 cleanupListeners();
-                 this.onComplete?.();
-                 resolveAck();
-               };
-               this.signaling.on('receive_completed', ackHandler);
-               
-               // Store cleanup for this specific listener
-               const cleanupAck = () => {
-                 this.signaling.off && this.signaling.off('receive_completed', ackHandler);
-               };
-               
-               // Attach to ephemeral property or managed list if needed, 
-               // but for now we rely on the main cleanupListeners/resolve flow
-               // Actually we need to be able to remove this listener if we timeout.
-               // Let's modify the outer scope variable.
-               
-               // Wait for buffer to drain
-               const waitForBufferDrain = () => {
-                 const bufferedAmount = this.dataChannel?.bufferedAmount || 0;
-                 if (bufferedAmount === 0) {
-                   // Buffer drained - wait 2s for network then check ACK
-                   setTimeout(() => {
-                     if (ackReceived) {
-                       resolve(); // Already got ACK
-                       return;
-                     }
-                     
-                     // If not yet received, wait up to 30s (minus the 2s we already waited)
-                     const timeoutId = setTimeout(() => {
-                        if (!ackReceived) {
-                          console.log('DEBUG: Transfer ACK timeout, forcing success');
-                          cleanupAck();
-                          cleanupListeners();
-                          this.onComplete?.();
-                          resolve();
-                        }
-                     }, 28000);
-                     
-                     // If we receive ACK during this wait, ackHandler will fire
-                     // We need to make sure ackHandler resolves the OUTER promise
-                     // We can't do that easily from inside.
-                     // Let's restructure:
-                   }, 2000);
-                 } else {
-                   setTimeout(waitForBufferDrain, 50);
-                 }
-               };
-               waitForBufferDrain();
-            });
-            
-            // Simplified Logic:
-            // 1. Listen for ACK.
-            // 2. Wait 2s (regardless of ACK).
-            // 3. After 2s, if ACK verified => DONE.
-            // 4. If not, wait until ACK or Timeout.
-            
-            const ackHandler = () => {
-                 console.log('DEBUG: Received ACK from receiver');
-                 ackReceived = true;
-            };
-            this.signaling.on('receive_completed', ackHandler);
-
-            const waitForBufferDrain = () => {
-              const bufferedAmount = this.dataChannel?.bufferedAmount || 0;
-              if (bufferedAmount === 0) {
-                 setTimeout(() => {
-                    // Network settled.
-                    if (ackReceived) {
-                        finishSuccess();
-                    } else {
-                        // Wait for ACK with timeout
-                        const checkInterval = setInterval(() => {
-                            if (ackReceived) {
-                                clearInterval(checkInterval);
-                                clearTimeout(timeoutId);
-                                finishSuccess();
-                            }
-                        }, 100);
-                        
-                  // Dynamic timeout based on file size
-                  // Base 30s + 500ms per MB to allow for receiver processing/assembly time
-                  const processingTimePerMB = 500;
-                  const fileSizeMB = file.size / (1024 * 1024);
-                  const dynamicTimeout = 30000 + Math.ceil(fileSizeMB * processingTimePerMB);
-                  
-                  // Timeout fallback
-                  const timeoutId = setTimeout(() => {
-                    clearInterval(checkInterval);
-                    console.log(`DEBUG: ACK Timeout after ${dynamicTimeout}ms`);
-                    finishSuccess(); // Assume success on timeout
-                  }, dynamicTimeout);
-                    }
-                 }, 2000);
-              } else {
-                setTimeout(waitForBufferDrain, 50);
-              }
-            };
-            
-            const finishSuccess = () => {
-                this.signaling.off && this.signaling.off('receive_completed', ackHandler);
-                cleanupListeners();
-                this.onComplete?.();
-                resolve();
-            };
-            
-            waitForBufferDrain();
-          }
-        } catch (error) {
-          reject(error instanceof Error ? error : new Error('Failed to send chunk'));
-          cleanupListeners();
-          return;
+        } catch (e) {
+          console.warn('[Sender] Bad message', e);
         }
       };
 
-      reader.onerror = () => {
-        reject(new Error('Failed to read file'));
-        cleanupListeners();
-      };
+      this.dataChannel?.addEventListener('error', onError);
+      this.dataChannel?.addEventListener('close', onClose);
+      this.dataChannel?.addEventListener('message', onMessage);
 
-      const readNextChunk = () => {
+      // 3. Send Loop with Backpressure
+      const readAndSend = () => {
+        if (this.sendState !== SendState.Sending) return;
+
         const slice = file.slice(offset, offset + CHUNK_SIZE);
         reader.readAsArrayBuffer(slice);
       };
 
-      // Start reading
-      readNextChunk();
+      reader.onload = (e) => {
+        if (!e.target?.result || !this.dataChannel) {
+          cleanup();
+          reject(new Error('Read failed or channel lost'));
+          return;
+        }
+
+        const chunk = e.target.result as ArrayBuffer;
+        
+        try {
+          this.dataChannel.send(chunk);
+          offset += chunk.byteLength;
+
+          // Progress
+          const percent = (offset / file.size) * 100;
+          this.onProgress?.({ percent, bytesTransferred: offset });
+
+          if (offset < file.size) {
+            // Check buffer
+            if (this.dataChannel.bufferedAmount > this.MAX_BUFFER_SIZE) {
+               // Wait for bufferedamountlow
+               const onLow = () => {
+                  this.dataChannel?.removeEventListener('bufferedamountlow', onLow);
+                  readAndSend();
+               };
+               this.dataChannel.addEventListener('bufferedamountlow', onLow);
+            } else {
+               // Keep going
+               readAndSend();
+            }
+          } else {
+            // File sent. Send End.
+            console.log('[Sender] File sent. Sending transfer_end...');
+            const endMsg: DCMessage = { type: 'transfer_end', fileId };
+            this.dataChannel.send(JSON.stringify(endMsg));
+            
+            this.sendState = SendState.WaitingAck;
+            console.log('[Sender] Waiting for ACK...');
+
+            // ACK Timeout
+            ackTimeout = setTimeout(() => {
+              if (this.sendState === SendState.WaitingAck) {
+                console.warn('[Sender] ACK timeout -> Assuming success');
+                this.sendState = SendState.Done;
+                cleanup();
+                this.onComplete?.();
+                resolve();
+              }
+            }, 30000); // 30s timeout
+          }
+        } catch (err) {
+          cleanup();
+          reject(err);
+        }
+      };
+      
+      reader.onerror = () => {
+        cleanup();
+        reject(new Error('File read error'));
+      };
+
+      // Kick off
+      readAndSend();
     });
   }
+
+  // ==============================================================================
+  // RECEIVER LOGIC
+  // ==============================================================================
 
   receiveFile(
     onFileReceived: (file: File, metadata: FileMetadata) => void
   ): void {
-    // Store the callback - handlers will be set up when data channel is ready
     this.onFileReceived = onFileReceived;
-
-    // If data channel is already available, set up handlers immediately
     if (this.dataChannel) {
       this.setupFileReceptionHandlers(this.dataChannel);
     }
-    // Otherwise, handlers will be set up in setupDataChannel when the channel is created
+  }
+
+  private setupFileReceptionHandlers(channel: RTCDataChannel): void {
+    channel.onmessage = (event) => {
+      // 1. Handling Protocol Messages (Strings)
+      if (typeof event.data === 'string') {
+        try {
+          const msg = JSON.parse(event.data) as DCMessage;
+
+          switch (msg.type) {
+            case 'transfer_started':
+              if (!msg.fileId || !msg.file_name || !msg.file_size) {
+                 console.warn('[Receiver] Invalid transfer_started');
+                 return;
+              }
+              console.log(`[Receiver] Starting ${msg.fileId} (${msg.file_name})`);
+              
+              // Reset state
+              this.fileMetadata = {
+                fileId: msg.fileId,
+                totalSize: msg.file_size,
+                fileName: msg.file_name,
+                fileType: msg.file_type || 'application/octet-stream'
+              };
+              
+              // Pre-allocate buffer logic
+              try {
+                this.activeTransferBuffer = new Uint8Array(msg.file_size);
+              } catch (oom) {
+                console.error('Failed to allocate buffer:', oom);
+                this.onError?.('Not enough memory for file transfer');
+                return;
+              }
+              
+              this.receivedBytes = 0;
+              this.isTransferEndReceived = false;
+              this.receiveState = ReceiveState.Receiving;
+              break;
+
+            case 'transfer_end':
+              if (this.receiveState === ReceiveState.Receiving && this.fileMetadata?.fileId === msg.fileId) {
+                console.log('[Receiver] transfer_end received.');
+                this.isTransferEndReceived = true;
+                
+                // Try finalize (if bytes also complete)
+                this.tryFinalizeTransfer();
+              } else {
+                console.warn('[Receiver] Ignored transfer_end (ID mismatch or wrong state)');
+              }
+              break;
+              
+            case 'ack':
+                break;
+          }
+        } catch (e) {
+          console.error('[Receiver] Protocol Error', e);
+        }
+        return;
+      }
+
+      // 2. Handling Binary Chunks
+      if (event.data instanceof ArrayBuffer) {
+        // STRICT GUARD: Must be in Receiving state
+        if (this.receiveState !== ReceiveState.Receiving || !this.fileMetadata || !this.activeTransferBuffer) {
+          return; // Hard drop
+        }
+
+        const chunk = new Uint8Array(event.data);
+        
+        // Safety check bound
+        if (this.receivedBytes + chunk.length > this.activeTransferBuffer.length) {
+          console.error('[Receiver] Overflow detected!');
+          // Can either drop or abort. Aborting is safer.
+          // For now, let's stop accepting.
+          return;
+        }
+
+        // Write directly to buffer
+        this.activeTransferBuffer.set(chunk, this.receivedBytes);
+        this.receivedBytes += chunk.length;
+        
+        // Progress O(1)
+        const percent = (this.receivedBytes / this.fileMetadata.totalSize) * 100;
+        
+        // Throttled notification (every 1% or so, or every chunk if small)
+        // Since we don't have throttle var, calling every chunk is okay-ish as it's just calc.
+        this.onProgress?.({ percent, bytesTransferred: this.receivedBytes });
+
+        // Try finalize (if end signal also received)
+        this.tryFinalizeTransfer();
+      }
+    };
+  }
+
+  private tryFinalizeTransfer(): void {
+    if (
+        this.receiveState === ReceiveState.Receiving && 
+        this.isTransferEndReceived && 
+        this.receivedBytes >= (this.fileMetadata?.totalSize || 0)
+    ) {
+        this.finalizeTransfer();
+    }
+  }
+
+  private finalizeTransfer(): void {
+    const metadata = this.fileMetadata;
+    const buffer = this.activeTransferBuffer;
+    
+    if (!metadata || !buffer) return;
+
+    console.log('[Receiver] Finalizing transfer. All checks passed.');
+    this.receiveState = ReceiveState.Done;
+    
+    // Create Blob from pre-allocated buffer
+    const blob = new Blob([buffer as unknown as BlobPart], { type: metadata.fileType });
+    const file = new File([blob], metadata.fileName, { type: metadata.fileType });
+    
+    // Notify app
+    this.onFileReceived?.(file, {
+      fileId: metadata.fileId,
+      name: metadata.fileName,
+      size: metadata.totalSize,
+      type: metadata.fileType
+    });
+
+    // Cleanup heavy buffer immediately
+    this.activeTransferBuffer = null; 
+
+    // Send ACK via DataChannel
+    try {
+      if (this.dataChannel && this.dataChannel.readyState === 'open') {
+        const ackMsg: DCMessage = {
+          type: 'ack',
+          fileId: this.fileMetadata.fileId
+        };
+        this.dataChannel.send(JSON.stringify(ackMsg));
+        console.log('[Receiver] ACK sent.');
+      }
+    } catch (e) {
+      console.error('[Receiver] Failed to send ACK', e);
+    }
+    
+    this.onComplete?.();
   }
 
   cleanup(): void {
     this.isCleaningUp = true;
-    
+    this.sendState = SendState.Idle;
+    this.receiveState = ReceiveState.Idle;
+    this.activeTransferBuffer = null;
+    this.fileMetadata = null;
+
     if (this.dataChannel) {
       this.dataChannel.close();
       this.dataChannel = null;
