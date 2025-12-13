@@ -186,6 +186,7 @@ export class WebRTCFileTransfer {
   private setupFileReceptionHandlers(channel: RTCDataChannel): void {
     // Listen for metadata
     this.signaling.on('transfer_started', (msg) => {
+      console.log('DEBUG: transfer_started received', msg);
       this.fileMetadata = {
         totalSize: msg.file_size,
         fileName: msg.file_name,
@@ -209,9 +210,14 @@ export class WebRTCFileTransfer {
 
         // Check if transfer is complete
         const receivedSize = this.receivedChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+        
+        // Debug: Log every 10th chunk or when complete
+        if (this.receivedChunks.length % 10 === 0 || (this.fileMetadata && receivedSize >= this.fileMetadata.totalSize)) {
+          console.log('DEBUG: Received chunks', this.receivedChunks.length, 'size', receivedSize, 'totalSize', this.fileMetadata?.totalSize);
+        }
 
         if (this.fileMetadata && receivedSize >= this.fileMetadata.totalSize) {
-          // Mark as complete immediately to suppress errors from peer closing
+          console.log('DEBUG: Transfer complete, reconstructing file');
           this.isTransferComplete = true;
           
           // Reconstruct file
