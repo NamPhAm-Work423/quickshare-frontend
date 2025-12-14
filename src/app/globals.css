@@ -7,7 +7,7 @@
   html {
     @apply dark;
   }
-  
+
   :root {
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
@@ -79,3 +79,23 @@ nextjs-portal {
   top: unset !important;
 }
 
+/* Marketing page animations */
+@keyframes gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-gradient {
+  animation: gradient 3s ease infinite;
+}
+
+.delay-1000 {
+  animation-delay: 1000ms;
+}
