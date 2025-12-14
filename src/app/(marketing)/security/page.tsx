@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import Link from 'next/link';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
-import { parseContent } from '@/lib/content/parser';
+import { parseContent, transformMarkdownToHtml } from '@/lib/content/parser';
 import { seoConfig } from '@/lib/seo/metadata';
 import { Button } from '@/components/ui/button';
 import { 
@@ -31,7 +31,11 @@ async function getSecurityContent() {
   try {
     const filePath = join(process.cwd(), 'content/pages/security.md');
     const rawContent = await readFile(filePath, 'utf-8');
-    return parseContent(rawContent);
+    const parsed = parseContent(rawContent);
+    return {
+      ...parsed,
+      content: transformMarkdownToHtml(parsed.content)
+    };
   } catch (error) {
     console.error('Error loading security content:', error);
     return null;

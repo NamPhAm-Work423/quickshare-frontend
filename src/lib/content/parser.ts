@@ -169,22 +169,91 @@ export function validateBlogPostMetadata(metadata: any): metadata is BlogPostMet
 
 // Content transformation utilities
 export function transformMarkdownToHtml(markdown: string): string {
-  // Basic markdown to HTML transformation
-  // In a real implementation, you might use a library like marked or remark
-  return markdown
-    .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-    .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-    .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-    .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
-    .replace(/\*(.*)\*/gim, '<em>$1</em>')
-    .replace(/!\[([^\]]*)\]\(([^\)]*)\)/gim, '<img alt="$1" src="$2" />')
-    .replace(/\[([^\]]*)\]\(([^\)]*)\)/gim, '<a href="$2">$1</a>')
-    .replace(/`([^`]*)`/gim, '<code>$1</code>')
-    .replace(/\n\n/gim, '</p><p>')
-    .replace(/^(.*)$/gim, '<p>$1</p>')
-    .replace(/<p><\/p>/gim, '')
-    .replace(/<p>(<h[1-6]>.*<\/h[1-6]>)<\/p>/gim, '$1')
-    .replace(/<p>(<img.*\/>)<\/p>/gim, '$1');
+  // Enhanced markdown to HTML transformation
+  let html = markdown;
+  
+  // Handle horizontal rules
+  html = html.replace(/^---$/gm, '<hr />');
+  html = html.replace(/^\*\*\*$/gm, '<hr />');
+  
+  // Handle headers (must be done before other processing)
+  html = html.replace(/^#### (.*$)/gim, '<h4>$1</h4>');
+  html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+  html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+  html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+  
+  // Handle unordered lists
+  html = html.replace(/^[-*] (.*)$/gim, '<li>$1</li>');
+  
+  // Handle bold and italic (non-greedy)
+  html = html.replace(/\*\*([^*]+)\*\*/gim, '<strong>$1</strong>');
+  html = html.replace(/\*([^*]+)\*/gim, '<em>$1</em>');
+  
+  // Handle images
+  html = html.replace(/!\[([^\]]*)\]\(([^)]*)\)/gim, '<img alt="$1" src="$2" />');
+  
+  // Handle links
+  html = html.replace(/\[([^\]]*)\]\(([^)]*)\)/gim, '<a href="$2">$1</a>');
+  
+  // Handle inline code
+  html = html.replace(/`([^`]*)`/gim, '<code>$1</code>');
+  
+  // Wrap consecutive <li> elements in <ul>
+  html = html.replace(/(<li>.*<\/li>\n?)+/gim, (match) => {
+    return '<ul>' + match + '</ul>';
+  });
+  
+  // Split into paragraphs
+  const lines = html.split('\n');
+  const processedLines: string[] = [];
+  let inParagraph = false;
+  
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    
+    // Skip empty lines
+    if (!trimmedLine) {
+      if (inParagraph) {
+        processedLines.push('</p>');
+        inParagraph = false;
+      }
+      continue;
+    }
+    
+    // Check if it's a block element
+    const isBlockElement = /^<(h[1-6]|ul|ol|li|hr|blockquote|div|pre|table)/i.test(trimmedLine);
+    const isClosingBlock = /^<\/(ul|ol)/i.test(trimmedLine);
+    
+    if (isBlockElement || isClosingBlock) {
+      if (inParagraph) {
+        processedLines.push('</p>');
+        inParagraph = false;
+      }
+      processedLines.push(trimmedLine);
+    } else {
+      if (!inParagraph) {
+        processedLines.push('<p>');
+        inParagraph = true;
+      }
+      processedLines.push(trimmedLine);
+    }
+  }
+  
+  if (inParagraph) {
+    processedLines.push('</p>');
+  }
+  
+  html = processedLines.join('\n');
+  
+  // Clean up nested paragraphs in block elements
+  html = html.replace(/<p>\s*(<h[1-6]>)/gim, '$1');
+  html = html.replace(/(<\/h[1-6]>)\s*<\/p>/gim, '$1');
+  html = html.replace(/<p>\s*(<ul>)/gim, '$1');
+  html = html.replace(/(<\/ul>)\s*<\/p>/gim, '$1');
+  html = html.replace(/<p>\s*(<hr \/>)\s*<\/p>/gim, '$1');
+  html = html.replace(/<p><\/p>/gim, '');
+  
+  return html;
 }
 
 export function generateSlug(title: string): string {

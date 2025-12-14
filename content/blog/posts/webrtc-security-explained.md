@@ -2,8 +2,8 @@
 title: "WebRTC Security Explained: How P2P File Transfer Stays Safe"
 description: "Deep dive into WebRTC security features, encryption protocols, and how peer-to-peer file transfer protects your data."
 slug: "webrtc-security-explained"
-publishedAt: "2024-01-10"
-updatedAt: "2024-01-10"
+publishedAt: "2025-12-15"
+updatedAt: "2025-12-15"
 author: "QuickShare Team"
 tags: ["webrtc", "security", "encryption", "p2p"]
 readingTime: 7

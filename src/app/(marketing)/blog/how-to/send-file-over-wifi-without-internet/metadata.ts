@@ -15,7 +15,7 @@ export const metadata: Metadata = {
     title: 'How to Send Files Over WiFi Without Internet - Local Network Transfer',
     description: 'Learn how to transfer files between devices on the same WiFi network even without internet connection. Complete guide for offline file sharing.',
     type: 'article',
-    publishedTime: '2024-01-25T10:00:00.000Z',
+    publishedTime: '2025-12-15T10:00:00.000Z',
     authors: ['QuickShare Team'],
     tags: ['WiFi', 'Offline', 'Local Network', 'File Transfer'],
   },

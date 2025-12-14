@@ -174,7 +174,7 @@ export function ExampleCompletePage() {
         headline={pageData.title}
         description={pageData.description}
         url={pageData.canonical!}
-        datePublished="2024-01-15T10:00:00Z"
+        datePublished="2025-12-15T10:00:00Z"
         author={{ name: 'QuickShare Team', type: 'Organization' }}
         image={pageData.ogImage}
       />

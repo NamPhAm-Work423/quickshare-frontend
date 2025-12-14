@@ -123,7 +123,7 @@ export default function TermsPage() {
             {/* Last updated badge */}
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-muted/50 border border-border/50 text-sm text-muted-foreground">
               <Calendar className="w-4 h-4" />
-              <span>Last updated: January 15, 2024</span>
+              <span>Last updated: December 15, 2025</span>
             </div>
           </div>
         </div>

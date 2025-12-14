@@ -84,7 +84,7 @@ const MarketingFooter = () => {
 
         <div className="border-t mt-12 pt-8 flex flex-col md:flex-row justify-between items-center">
           <p className="text-sm text-muted-foreground">
-            © 2024 QuickShare. All rights reserved.
+            © 2025 QuickShare. All rights reserved.
           </p>
           <div className="flex items-center space-x-6 mt-4 md:mt-0">
             <Link 

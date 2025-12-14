@@ -1,7 +1,7 @@
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'How to Send Files from iPhone to PC - Complete Guide 2024',
+  title: 'How to Send Files from iPhone to PC - Complete Guide 2025',
   description: 'Learn how to transfer files from iPhone to Windows PC without iTunes or cables. Step-by-step guide using modern web technology for secure file sharing.',
   keywords: [
     'send files from iphone to pc',
@@ -12,16 +12,16 @@ export const metadata: Metadata = {
     'send photos from iphone to pc'
   ],
   openGraph: {
-    title: 'How to Send Files from iPhone to PC - Complete Guide 2024',
+    title: 'How to Send Files from iPhone to PC - Complete Guide 2025',
     description: 'Learn how to transfer files from iPhone to Windows PC without iTunes or cables. Step-by-step guide using modern web technology for secure file sharing.',
     type: 'article',
-    publishedTime: '2024-01-15T10:00:00.000Z',
+    publishedTime: '2025-12-15T10:00:00.000Z',
     authors: ['QuickShare Team'],
     tags: ['iPhone', 'PC', 'File Transfer', 'How-to Guide'],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'How to Send Files from iPhone to PC - Complete Guide 2024',
+    title: 'How to Send Files from iPhone to PC - Complete Guide 2025',
     description: 'Learn how to transfer files from iPhone to Windows PC without iTunes or cables. Step-by-step guide using modern web technology.',
   },
   alternates: {

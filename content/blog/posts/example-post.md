@@ -2,8 +2,8 @@
 title: "What is P2P File Transfer? Complete Guide"
 description: "Learn how peer-to-peer file transfer works, its benefits, and why it's more secure than traditional cloud storage methods."
 slug: "what-is-p2p-file-transfer"
-publishedAt: "2024-01-15"
-updatedAt: "2024-01-15"
+publishedAt: "2025-12-15"
+updatedAt: "2025-12-15"
 author: "QuickShare Team"
 tags: ["p2p", "file-transfer", "webrtc", "security"]
 readingTime: 5

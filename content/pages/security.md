@@ -2,8 +2,8 @@
 title: "Security & Privacy - How QuickShare Protects Your Files"
 description: "Detailed explanation of QuickShare's security measures, encryption, and privacy protections for P2P file transfer."
 slug: "security"
-publishedAt: "2024-01-01"
-updatedAt: "2024-01-15"
+publishedAt: "2025-12-15"
+updatedAt: "2025-12-15"
 primaryKeyword: "secure file sharing"
 secondaryKeywords: ["file transfer security", "p2p encryption", "webrtc security"]
 searchIntent: "informational"
@@ -172,4 +172,4 @@ Your trust is our responsibility. We're committed to maintaining the highest sec
 
 ---
 
-*Last updated: January 15, 2024*
+*Last updated: December 15, 2025*

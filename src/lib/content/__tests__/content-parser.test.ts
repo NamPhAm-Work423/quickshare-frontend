@@ -118,7 +118,7 @@ This is a long piece of content that should be truncated at some point to create
 title: "Test Post"
 description: "Test description"
 slug: "test-post"
-publishedAt: "2024-01-01"
+publishedAt: "2025-12-15"
 primaryKeyword: "test"
 searchIntent: "informational"
 ---
@@ -143,7 +143,7 @@ This is test content for parsing.`;
         title: 'Test Title',
         description: 'Test description',
         slug: 'test-slug',
-        publishedAt: '2024-01-01',
+        publishedAt: '2025-12-15',
         primaryKeyword: 'test keyword',
         searchIntent: 'informational' as const,
       };
@@ -167,7 +167,7 @@ This is test content for parsing.`;
         title: 'Test Title',
         description: 'Test description',
         slug: 'test-slug',
-        publishedAt: '2024-01-01',
+        publishedAt: '2025-12-15',
         primaryKeyword: 'test keyword',
         searchIntent: 'informational' as const,
         author: 'Test Author',
@@ -183,7 +183,7 @@ This is test content for parsing.`;
         title: 'Test Title',
         description: 'Test description',
         slug: 'test-slug',
-        publishedAt: '2024-01-01',
+        publishedAt: '2025-12-15',
         primaryKeyword: 'test keyword',
         searchIntent: 'informational' as const,
         // missing author, tags, readingTime

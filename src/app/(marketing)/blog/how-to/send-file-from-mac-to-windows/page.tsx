@@ -90,7 +90,7 @@ export default function SendFileFromMacToWindowsGuide() {
           </h1>
           
           <div className="flex items-center gap-4 text-gray-600 mb-6">
-            <time dateTime="2024-01-20">January 20, 2024</time>
+            <time dateTime="2025-12-15">December 15, 2025</time>
             <span>•</span>
             <span>3 min read</span>
             <span>•</span>

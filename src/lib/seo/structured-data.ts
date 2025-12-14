@@ -97,7 +97,7 @@ export const structuredDataGenerators = {
     url: 'https://quickshare.app',
     logo: 'https://quickshare.app/logo.png',
     sameAs: [],
-    foundingDate: '2024',
+    foundingDate: '2025',
     contactPoint: {
       '@type': 'ContactPoint',
       contactType: 'technical support',

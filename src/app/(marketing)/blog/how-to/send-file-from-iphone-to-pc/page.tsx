@@ -86,11 +86,11 @@ export default function SendFileFromIPhoneToPCGuide() {
           </nav>
           
           <h1 className="text-4xl font-bold mb-4">
-            How to Send Files from iPhone to PC - Complete Guide 2024
+            How to Send Files from iPhone to PC - Complete Guide 2025
           </h1>
           
           <div className="flex items-center gap-4 text-gray-600 mb-6">
-            <time dateTime="2024-01-15">January 15, 2024</time>
+            <time dateTime="2025-12-15">December 15, 2025</time>
             <span>•</span>
             <span>5 min read</span>
             <span>•</span>

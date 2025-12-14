@@ -2,8 +2,8 @@
 title: "Privacy Policy - Your Data, Your Control"
 description: "QuickShare's privacy policy: how we protect your data, what we collect, and why we don't track users or store files."
 slug: "privacy"
-publishedAt: "2024-01-01"
-updatedAt: "2024-01-15"
+publishedAt: "2025-12-15"
+updatedAt: "2025-12-15"
 primaryKeyword: "file sharing privacy"
 secondaryKeywords: ["privacy policy", "data protection", "no tracking"]
 searchIntent: "informational"
@@ -12,7 +12,7 @@ ogImage: "/pages/privacy-policy.jpg"
 
 # Privacy Policy
 
-*Last updated: January 15, 2024*
+*Last updated: December 15, 2025*
 
 At QuickShare, your privacy is not just a policy—it's our core principle. This privacy policy explains how we handle your data (spoiler: we barely collect any).
 
@@ -218,4 +218,4 @@ Your trust is our most valuable asset. We work every day to earn and maintain it
 
 ---
 
-*This privacy policy is effective as of January 15, 2024. For questions or concerns, contact us at privacy@quickshare.app.*
+*This privacy policy is effective as of December 15, 2025. For questions or concerns, contact us at privacy@quickshare.app.*

@@ -24,7 +24,7 @@ Blog posts are stored as markdown files with YAML frontmatter. Each post should 
 title: "Post Title (SEO Optimized)"
 description: "Meta description for search engines (max 160 chars)"
 slug: "url-friendly-slug"
-publishedAt: "2024-01-15"
+publishedAt: "2025-12-15"
 author: "Author Name"
 tags: ["tag1", "tag2", "tag3"]
 readingTime: 5
@@ -37,7 +37,7 @@ searchIntent: "informational"  # informational|navigational|transactional|commer
 ### Optional Frontmatter Fields
 
 ```yaml
-updatedAt: "2024-01-20"
+updatedAt: "2025-12-15"
 ogImage: "/blog/post-image.jpg"
 excerpt: "Custom excerpt override"
 noIndex: false
@@ -50,7 +50,7 @@ noIndex: false
 title: "What is P2P File Transfer? Complete Guide"
 description: "Learn how peer-to-peer file transfer works, its benefits, and why it's more secure than traditional cloud storage methods."
 slug: "what-is-p2p-file-transfer"
-publishedAt: "2024-01-15"
+publishedAt: "2025-12-15"
 author: "QuickShare Team"
 tags: ["p2p", "file-transfer", "webrtc"]
 readingTime: 5
@@ -75,7 +75,7 @@ Static pages follow the same markdown + frontmatter structure but with simpler m
 title: "Page Title"
 description: "Page description for SEO"
 slug: "page-slug"
-publishedAt: "2024-01-01"
+publishedAt: "2025-12-15"
 primaryKeyword: "main keyword"
 searchIntent: "informational"
 ---
@@ -88,7 +88,7 @@ searchIntent: "informational"
 title: "About QuickShare - Secure P2P File Sharing"
 description: "Learn about QuickShare's mission to provide secure, private file sharing without accounts or cloud storage."
 slug: "about"
-publishedAt: "2024-01-01"
+publishedAt: "2025-12-15"
 primaryKeyword: "secure file sharing"
 searchIntent: "informational"
 ---

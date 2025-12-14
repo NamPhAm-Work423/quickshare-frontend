@@ -2,8 +2,8 @@
 title: "About QuickShare - Secure P2P File Sharing"
 description: "Learn about QuickShare's mission to provide secure, private file sharing without accounts or cloud storage."
 slug: "about"
-publishedAt: "2024-01-01"
-updatedAt: "2024-01-15"
+publishedAt: "2025-12-15"
+updatedAt: "2025-12-15"
 primaryKeyword: "secure file sharing"
 secondaryKeywords: ["p2p file transfer", "no login file sharing", "private file transfer"]
 searchIntent: "informational"
@@ -71,4 +71,4 @@ QuickShare is built with transparency in mind. Our source code is available on G
 
 ---
 
-*Last updated: January 15, 2024*
+*Last updated: December 15, 2025*

@@ -15,7 +15,7 @@ export const metadata: Metadata = {
     title: 'How to Send Files from Mac to Windows PC - Easy Transfer Guide',
     description: 'Learn how to transfer files between Mac and Windows computers without compatibility issues. Step-by-step guide for seamless cross-platform file sharing.',
     type: 'article',
-    publishedTime: '2024-01-20T10:00:00.000Z',
+    publishedTime: '2025-12-15T10:00:00.000Z',
     authors: ['QuickShare Team'],
     tags: ['Mac', 'Windows', 'File Transfer', 'Cross-platform'],
   },

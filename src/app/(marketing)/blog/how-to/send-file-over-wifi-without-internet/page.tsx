@@ -90,7 +90,7 @@ export default function SendFileOverWiFiWithoutInternetGuide() {
           </h1>
           
           <div className="flex items-center gap-4 text-gray-600 mb-6">
-            <time dateTime="2024-01-25">January 25, 2024</time>
+            <time dateTime="2025-12-15">December 15, 2025</time>
             <span>•</span>
             <span>5 min read</span>
             <span>•</span>

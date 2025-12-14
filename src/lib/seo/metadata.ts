@@ -146,7 +146,7 @@ export const structuredData = {
     description: 'Secure P2P file sharing without login',
     url: 'https://quickshare.app',
     sameAs: [],
-    foundingDate: '2024',
+    foundingDate: '2025',
     contactPoint: {
       '@type': 'ContactPoint',
       contactType: 'technical support'
