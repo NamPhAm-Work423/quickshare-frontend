@@ -1,0 +1,39 @@
+{
+  "title": "QuickShare Blog - P2P File Sharing Insights",
+  "description": "Learn about P2P file transfer, WebRTC technology, security best practices, and how-to guides for secure file sharing.",
+  "categories": [
+    {
+      "slug": "p2p-file-sharing",
+      "name": "P2P File Sharing",
+      "description": "Deep dives into peer-to-peer file transfer technology"
+    },
+    {
+      "slug": "security",
+      "name": "Security & Privacy",
+      "description": "File sharing security, encryption, and privacy protection"
+    },
+    {
+      "slug": "how-to",
+      "name": "How-To Guides",
+      "description": "Step-by-step guides for file transfer between devices"
+    }
+  ],
+  "tags": [
+    "p2p",
+    "file-transfer",
+    "webrtc",
+    "security",
+    "privacy",
+    "encryption",
+    "browser",
+    "no-login",
+    "direct-transfer"
+  ],
+  "authors": [
+    {
+      "name": "QuickShare Team",
+      "bio": "Experts in P2P file transfer and web security",
+      "avatar": "/authors/quickshare-team.jpg"
+    }
+  ]
+}

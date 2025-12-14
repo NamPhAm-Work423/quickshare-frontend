@@ -6,6 +6,14 @@ import {
   ApiError,
   DownloadByCodeResponse,
 } from './types';
+import { 
+  StandardError, 
+  ErrorCode, 
+  normalizeError, 
+  ErrorLogger,
+  createApiConnectionError,
+  createUnknownError
+} from './errors';
 
 const isDevelopment = (): boolean => {
   if (typeof window === 'undefined') {
@@ -73,9 +81,17 @@ export async function createSession(
       // Try to parse error response
       try {
         const error = (await response.json()) as ApiError;
-        throw new Error(error.error || 'Failed to create session');
+        throw new StandardError(
+          ErrorCode.SESSION_CREATION_FAILED,
+          error.error || 'Tạo phiên chia sẻ thất bại',
+          error
+        );
       } catch (parseError) {
-        throw new Error(`Backend returned error: ${response.status} ${response.statusText}`);
+        throw new StandardError(
+          ErrorCode.INVALID_RESPONSE,
+          `Backend returned error: ${response.status} ${response.statusText}`,
+          { status: response.status, statusText: response.statusText }
+        );
       }
     }
 
@@ -83,12 +99,10 @@ export async function createSession(
   } catch (error) {
     // Handle network errors (function not reachable, CORS, etc.)
     if (error instanceof TypeError && error.message.includes('fetch')) {
-      throw new Error(
-        'Cannot connect to API. Please ensure the Cloudflare Function is reachable.',
-      );
+      throw createApiConnectionError(error);
     }
-    // Re-throw other errors as-is
-    throw error;
+    // Re-throw other errors as normalized errors
+    throw normalizeError(error);
   }
 }
 
@@ -108,20 +122,26 @@ export async function joinSession(
     if (!response.ok) {
       try {
         const error = (await response.json()) as ApiError;
-        throw new Error(error.error || 'Failed to join session');
+        throw new StandardError(
+          ErrorCode.SESSION_JOIN_FAILED,
+          error.error || 'Tham gia phiên chia sẻ thất bại',
+          error
+        );
       } catch (parseError) {
-        throw new Error(`Backend returned error: ${response.status} ${response.statusText}`);
+        throw new StandardError(
+          ErrorCode.INVALID_RESPONSE,
+          `Backend returned error: ${response.status} ${response.statusText}`,
+          { status: response.status, statusText: response.statusText }
+        );
       }
     }
 
     return response.json() as Promise<JoinSessionResponse>;
   } catch (error) {
     if (error instanceof TypeError && error.message.includes('fetch')) {
-      throw new Error(
-        'Cannot connect to API. Please ensure the Cloudflare Function is reachable.',
-      );
+      throw createApiConnectionError(error);
     }
-    throw error;
+    throw normalizeError(error);
   }
 }
 
@@ -134,17 +154,19 @@ export async function checkHealth(): Promise<{ status: string; version: string }
     });
 
     if (!response.ok) {
-      throw new Error(`Health check failed: ${response.status} ${response.statusText}`);
+      throw new StandardError(
+        ErrorCode.HEALTH_CHECK_FAILED,
+        `Kiểm tra trạng thái thất bại: ${response.status} ${response.statusText}`,
+        { status: response.status, statusText: response.statusText }
+      );
     }
 
     return response.json();
   } catch (error) {
     if (error instanceof TypeError && error.message.includes('fetch')) {
-      throw new Error(
-        'Cannot connect to API. Please ensure the Cloudflare Function is reachable.',
-      );
+      throw createApiConnectionError(error);
     }
-    throw error;
+    throw normalizeError(error);
   }
 }
 
@@ -162,20 +184,26 @@ export async function downloadByCode(code: string): Promise<DownloadByCodeRespon
     if (!response.ok) {
       try {
         const error = (await response.json()) as ApiError;
-        throw new Error(error.error || 'Failed to download by code');
+        throw new StandardError(
+          ErrorCode.DOWNLOAD_FAILED,
+          error.error || 'Tải xuống thất bại',
+          error
+        );
       } catch (parseError) {
-        throw new Error(`Backend returned error: ${response.status} ${response.statusText}`);
+        throw new StandardError(
+          ErrorCode.INVALID_RESPONSE,
+          `Backend returned error: ${response.status} ${response.statusText}`,
+          { status: response.status, statusText: response.statusText }
+        );
       }
     }
 
     return response.json() as Promise<DownloadByCodeResponse>;
   } catch (error) {
     if (error instanceof TypeError && error.message.includes('fetch')) {
-      throw new Error(
-        'Cannot connect to API. Please ensure the Cloudflare Function is reachable.',
-      );
+      throw createApiConnectionError(error);
     }
-    throw error;
+    throw normalizeError(error);
   }
 }
 

@@ -3,6 +3,11 @@
 @tailwind utilities;
 
 @layer base {
+  /* Default to dark theme to prevent flashing */
+  html {
+    @apply dark;
+  }
+  
   :root {
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
