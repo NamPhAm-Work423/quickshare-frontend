@@ -1,13 +1,6 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
-import { FontPreloader, commonFonts } from '@/components/seo';
+import { inter } from '@/lib/fonts/local-font';
 import { MarketingHeader, MarketingFooter } from '@/components/marketing';
-
-const inter = Inter({ 
-  subsets: ['latin'],
-  display: 'swap', // Core Web Vitals optimization
-  preload: true,
-});
 
 export const metadata: Metadata = {
   robots: {
@@ -29,18 +22,12 @@ export default function MarketingLayout({
   children: React.ReactNode;
 }) {
   return (
-    <>
-      <FontPreloader 
-        fonts={[commonFonts.inter]} 
-        criticalFonts={['Inter']}
-      />
-      <div className={inter.className}>
-        <MarketingHeader />
-        <main className="min-h-screen">
-          {children}
-        </main>
-        <MarketingFooter />
-      </div>
-    </>
+    <div className={inter.className}>
+      <MarketingHeader />
+      <main className="min-h-screen">
+        {children}
+      </main>
+      <MarketingFooter />
+    </div>
   );
 }

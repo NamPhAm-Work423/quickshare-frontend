@@ -305,10 +305,6 @@ export function generateCoreWebVitalsTags(config?: PageSEO['coreWebVitals']) {
   if (!config) return {};
 
   return {
-    // Resource hints for LCP optimization
-    'dns-prefetch': ['//fonts.googleapis.com', '//fonts.gstatic.com'],
-    'preconnect': ['https://fonts.googleapis.com', 'https://fonts.gstatic.com'],
-    
     // Viewport optimization for CLS
     viewport: 'width=device-width, initial-scale=1, viewport-fit=cover',
     

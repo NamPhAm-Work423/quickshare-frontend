@@ -43,136 +43,30 @@ export const commonFonts: Record<string, FontConfig> = {
 };
 
 export function FontPreloader({ fonts, criticalFonts = [] }: FontPreloaderProps): ReactElement {
-  const generateFontPreloadLinks = (fontConfig: FontConfig): ReactElement[] => {
-    const links: ReactElement[] = [];
-    
-    fontConfig.weights.forEach((weight) => {
-      fontConfig.styles.forEach((style) => {
-        const shouldPreload = fontConfig.preload || criticalFonts.includes(fontConfig.family);
-        
-        if (shouldPreload) {
-          // Generate Google Fonts URL for preloading
-          const fontUrl = generateGoogleFontUrl(fontConfig.family, weight, style);
-          
-          links.push(
-            <link
-              key={`${fontConfig.family}-${weight}-${style}`}
-              rel="preload"
-              href={fontUrl}
-              as="font"
-              type="font/woff2"
-              crossOrigin="anonymous"
-            />
-          );
-        }
-      });
-    });
-    
-    return links;
-  };
-
-  const generateFontFaceCSS = (fontConfig: FontConfig): string => {
-    return fontConfig.weights.map((weight) => 
-      fontConfig.styles.map((style) => {
-        const fontUrl = generateGoogleFontUrl(fontConfig.family, weight, style);
-        return `
-          @font-face {
-            font-family: '${fontConfig.family}';
-            font-style: ${style};
-            font-weight: ${weight};
-            font-display: ${fontConfig.display};
-            src: url('${fontUrl}') format('woff2');
-          }
-        `;
-      }).join('')
-    ).join('');
-  };
-
-  const allPreloadLinks = fonts.flatMap(generateFontPreloadLinks);
-  const fontFaceCSS = fonts.map(generateFontFaceCSS).join('');
-
+  // Since we're using local fonts, this component now just returns null
+  // Local fonts are handled by Next.js localFont()
   return (
     <>
-      {/* Preload critical fonts */}
-      {allPreloadLinks}
-      
-      {/* Font face declarations */}
-      {fontFaceCSS && (
-        <style
-          dangerouslySetInnerHTML={{
-            __html: fontFaceCSS,
-          }}
-        />
-      )}
-      
-      {/* DNS prefetch for Google Fonts */}
-      <link rel="dns-prefetch" href="//fonts.googleapis.com" />
-      <link rel="dns-prefetch" href="//fonts.gstatic.com" />
-      
-      {/* Preconnect for faster font loading */}
-      <link rel="preconnect" href="https://fonts.googleapis.com" />
-      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      {/* Local fonts are handled by Next.js localFont() */}
+      {/* No external font preloading needed */}
     </>
   );
 }
 
-// Utility function to generate Google Fonts URL
-function generateGoogleFontUrl(family: string, weight: number, style: string): string {
-  const familyParam = family.replace(/\s+/g, '+');
-  const styleParam = style === 'italic' ? 'ital,' : '';
-  const weightParam = `${styleParam}wght@${style === 'italic' ? '1,' : '0,'}${weight}`;
-  
-  return `https://fonts.googleapis.com/css2?family=${familyParam}:${weightParam}&display=swap`;
+// Utility function to generate local font URLs (for future use)
+function generateLocalFontUrl(family: string, weight: number, style: string): string {
+  const styleStr = style === 'italic' ? '-italic' : '-normal';
+  return `/fonts/${family.toLowerCase()}/woff2/${family}-${weight}${styleStr}.woff2`;
 }
 
-// Hook for managing font loading performance
+// Hook for managing local font loading performance
 export function useFontPreloading(fonts: FontConfig[]) {
   const preloadCriticalFonts = (criticalFamilies: string[]) => {
-    if (typeof window === 'undefined') return;
-    
-    fonts
-      .filter(font => criticalFamilies.includes(font.family))
-      .forEach(font => {
-        font.weights.forEach(weight => {
-          font.styles.forEach(style => {
-            const link = document.createElement('link');
-            link.rel = 'preload';
-            link.href = generateGoogleFontUrl(font.family, weight, style);
-            link.as = 'font';
-            link.type = 'font/woff2';
-            link.crossOrigin = 'anonymous';
-            document.head.appendChild(link);
-          });
-        });
-      });
+    // Local fonts are preloaded via Next.js localFont(), no additional preloading needed
   };
 
   const loadFontAsync = async (fontConfig: FontConfig): Promise<void> => {
-    if (typeof window === 'undefined' || !('FontFace' in window)) return;
-    
-    const promises = fontConfig.weights.flatMap(weight =>
-      fontConfig.styles.map(async (style) => {
-        const fontUrl = generateGoogleFontUrl(fontConfig.family, weight, style);
-        const fontFace = new FontFace(
-          fontConfig.family,
-          `url(${fontUrl})`,
-          {
-            weight: weight.toString(),
-            style,
-            display: fontConfig.display,
-          }
-        );
-        
-        try {
-          const loadedFont = await fontFace.load();
-          document.fonts.add(loadedFont);
-        } catch (error) {
-          console.warn(`Failed to load font: ${fontConfig.family} ${weight} ${style}`, error);
-        }
-      })
-    );
-    
-    await Promise.all(promises);
+    // Local fonts are handled by Next.js, no async loading needed
   };
 
   return {
