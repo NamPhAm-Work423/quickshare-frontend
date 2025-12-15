@@ -1,0 +1,70 @@
+{
+  "family": "Inter",
+  "version": "4.0",
+  "fonts": [
+    {
+      "weight": 400,
+      "style": "normal",
+      "files": {
+        "woff2": "woff2/Inter-400-normal.woff2",
+        "ttf": "ttf/Inter-400-normal.ttf"
+      }
+    },
+    {
+      "weight": 400,
+      "style": "italic",
+      "files": {
+        "woff2": "woff2/Inter-400-italic.woff2",
+        "ttf": "ttf/Inter-400-italic.ttf"
+      }
+    },
+    {
+      "weight": 500,
+      "style": "normal",
+      "files": {
+        "woff2": "woff2/Inter-500-normal.woff2",
+        "ttf": "ttf/Inter-500-normal.ttf"
+      }
+    },
+    {
+      "weight": 500,
+      "style": "italic",
+      "files": {
+        "woff2": "woff2/Inter-500-italic.woff2",
+        "ttf": "ttf/Inter-500-italic.ttf"
+      }
+    },
+    {
+      "weight": 600,
+      "style": "normal",
+      "files": {
+        "woff2": "woff2/Inter-600-normal.woff2",
+        "ttf": "ttf/Inter-600-normal.ttf"
+      }
+    },
+    {
+      "weight": 600,
+      "style": "italic",
+      "files": {
+        "woff2": "woff2/Inter-600-italic.woff2",
+        "ttf": "ttf/Inter-600-italic.ttf"
+      }
+    },
+    {
+      "weight": 700,
+      "style": "normal",
+      "files": {
+        "woff2": "woff2/Inter-700-normal.woff2",
+        "ttf": "ttf/Inter-700-normal.ttf"
+      }
+    },
+    {
+      "weight": 700,
+      "style": "italic",
+      "files": {
+        "woff2": "woff2/Inter-700-italic.woff2",
+        "ttf": "ttf/Inter-700-italic.ttf"
+      }
+    }
+  ]
+}
