@@ -42,6 +42,7 @@
    >('idle');
  
    const handleUpload = async (uploadFiles?: File[], uploadTextParam?: string | null) => {
+     setUploadProgress(0);
      const filesToUpload = uploadFiles && uploadFiles.length > 0 ? uploadFiles : (file ? [file] : []);
      const textToUpload = filesToUpload.length === 0 ? (uploadTextParam || text) : null;
  
@@ -65,7 +66,7 @@
          useAppStore.getState().setFile(fileToUpload);
  
          await startP2PUpload({
-           files: [fileToUpload],
+           files: filesToUpload,
            onSessionCreated: (sessionInfo) => {
              setCode(sessionInfo.code);
              setExpirationTime(sessionInfo.expiresAt);

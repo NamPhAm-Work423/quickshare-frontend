@@ -375,10 +375,19 @@ export class WebRTCFileTransfer {
     if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
       throw new Error('Data channel is not open');
     }
-
+    
     for (let i = 0; i < files.length; i++) {
-      await this.sendFile(files[i]);
-      onFileComplete?.(i, files[i].name);
+      // Delay to prevent race conditions
+      if (i > 0) {
+        await new Promise(r => setTimeout(r, 500));
+      }
+      
+      try {
+        await this.sendFile(files[i]);
+        onFileComplete?.(i, files[i].name);
+      } catch (e) {
+        throw e;
+      }
     }
 
     // Signal that all files have been transferred

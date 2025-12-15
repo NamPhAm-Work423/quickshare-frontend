@@ -91,11 +91,6 @@ export function CoreWebVitals({
       onFontMetric(metric);
     }
     
-    // Log font metrics in development
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[Font Loading] ${metric.type}:`, metric);
-    }
-    
     // Send to analytics in production
     if (process.env.NODE_ENV === 'production' && typeof window !== 'undefined') {
       if ('gtag' in window) {
@@ -117,11 +112,6 @@ export function CoreWebVitals({
     const reportMetric = (metric: any) => {
       if (onMetric) {
         onMetric(metric);
-      }
-      
-      // Log metrics in development
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`[Core Web Vitals] ${metric.name}:`, metric.value);
       }
       
       // Send to analytics in production
