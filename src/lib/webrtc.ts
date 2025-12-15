@@ -203,7 +203,6 @@ export class WebRTCFileTransfer {
 
     channel.onerror = (error) => {
       if (!this.isCleaningUp && this.sendState !== SendState.Done && this.receiveState !== ReceiveState.Done) {
-        console.error('DataChannel Error:', error);
         this.onError?.('Data channel error');
       }
     };
@@ -226,7 +225,7 @@ export class WebRTCFileTransfer {
     const fileId = crypto.randomUUID();
     this.sendState = SendState.Sending;
 
-    console.log(`[Sender] Starting transfer: ${fileId} (${file.size} bytes)`);
+    // Starting transfer
 
     // 2. Send Metadata via DataChannel
     const metaMsg: DCMessage = {
@@ -272,14 +271,14 @@ export class WebRTCFileTransfer {
         try {
           const msg = JSON.parse(event.data) as DCMessage;
           if (msg.type === 'ack' && msg.fileId === fileId) {
-             console.log('[Sender] Received ACK. Transfer complete.');
+             // Received ACK. Transfer complete.
              this.sendState = SendState.Done;
              cleanup();
              this.onComplete?.();
              resolve();
           }
         } catch (e) {
-          console.warn('[Sender] Bad message', e);
+          // Bad message ignored
         }
       };
 
@@ -327,17 +326,17 @@ export class WebRTCFileTransfer {
             }
           } else {
             // File sent. Send End.
-            console.log('[Sender] File sent. Sending transfer_end...');
+            // File sent. Sending transfer_end
             const endMsg: DCMessage = { type: 'transfer_end', fileId };
             this.dataChannel.send(JSON.stringify(endMsg));
             
             this.sendState = SendState.WaitingAck;
-            console.log('[Sender] Waiting for ACK...');
+            // Waiting for ACK
 
             // ACK Timeout
             ackTimeout = setTimeout(() => {
               if (this.sendState === SendState.WaitingAck) {
-                console.warn('[Sender] ACK timeout -> Assuming success');
+                // ACK timeout -> Assuming success
                 this.sendState = SendState.Done;
                 cleanup();
                 this.onComplete?.();
@@ -384,10 +383,10 @@ export class WebRTCFileTransfer {
           switch (msg.type) {
             case 'transfer_started':
               if (!msg.fileId || !msg.file_name || !msg.file_size) {
-                 console.warn('[Receiver] Invalid transfer_started');
+                 // Invalid transfer_started
                  return;
               }
-              console.log(`[Receiver] Starting ${msg.fileId} (${msg.file_name})`);
+              // Starting transfer
               
               // Reset state
               this.fileMetadata = {
@@ -401,7 +400,6 @@ export class WebRTCFileTransfer {
               try {
                 this.activeTransferBuffer = new Uint8Array(msg.file_size);
               } catch (oom) {
-                console.error('Failed to allocate buffer:', oom);
                 this.onError?.('Not enough memory for file transfer');
                 return;
               }
@@ -413,13 +411,13 @@ export class WebRTCFileTransfer {
 
             case 'transfer_end':
               if (this.receiveState === ReceiveState.Receiving && this.fileMetadata?.fileId === msg.fileId) {
-                console.log('[Receiver] transfer_end received.');
+                // transfer_end received
                 this.isTransferEndReceived = true;
                 
                 // Try finalize (if bytes also complete)
                 this.tryFinalizeTransfer();
               } else {
-                console.warn('[Receiver] Ignored transfer_end (ID mismatch or wrong state)');
+                // Ignored transfer_end (ID mismatch or wrong state)
               }
               break;
               
@@ -427,7 +425,7 @@ export class WebRTCFileTransfer {
                 break;
           }
         } catch (e) {
-          console.error('[Receiver] Protocol Error', e);
+          // Protocol Error ignored
         }
         return;
       }
@@ -443,7 +441,7 @@ export class WebRTCFileTransfer {
         
         // Safety check bound
         if (this.receivedBytes + chunk.length > this.activeTransferBuffer.length) {
-          console.error('[Receiver] Overflow detected!');
+          // Overflow detected - dropping chunk
           // Can either drop or abort. Aborting is safer.
           // For now, let's stop accepting.
           return;
@@ -482,7 +480,7 @@ export class WebRTCFileTransfer {
     
     if (!metadata || !buffer) return;
 
-    console.log('[Receiver] Finalizing transfer. All checks passed.');
+    // Finalizing transfer. All checks passed.
     this.receiveState = ReceiveState.Done;
     
     // Create Blob from pre-allocated buffer
@@ -508,10 +506,10 @@ export class WebRTCFileTransfer {
           fileId: this.fileMetadata.fileId
         };
         this.dataChannel.send(JSON.stringify(ackMsg));
-        console.log('[Receiver] ACK sent.');
+        // ACK sent
       }
     } catch (e) {
-      console.error('[Receiver] Failed to send ACK', e);
+      // Failed to send ACK
     }
     
     this.onComplete?.();

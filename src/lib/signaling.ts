@@ -34,12 +34,11 @@ export class SignalingClient {
             const message: SignalingMessage = JSON.parse(event.data);
             this.handleMessage(message);
           } catch (error) {
-            console.error('Failed to parse signaling message:', error);
+            // Failed to parse signaling message - ignored
           }
         };
 
         this.ws.onerror = (error) => {
-          console.error('WebSocket error:', error);
           reject(error);
         };
 
@@ -66,7 +65,7 @@ export class SignalingClient {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
     } else {
-      console.error('WebSocket is not connected');
+      // WebSocket is not connected - message dropped
     }
   }
 

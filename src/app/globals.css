@@ -99,3 +99,86 @@ nextjs-portal {
 .delay-1000 {
   animation-delay: 1000ms;
 }
+
+/* Mobile and performance optimizations */
+.mobile-optimized *,
+.mobile-optimized *::before,
+.mobile-optimized *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+.mobile-optimized .animate-gradient {
+  animation: none !important;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+}
+
+/* Disable hover effects on mobile */
+.mobile-optimized .hover\:scale-105:hover,
+.mobile-optimized .hover\:shadow-lg:hover,
+.mobile-optimized .hover\:bg-muted:hover,
+.mobile-optimized .transition-colors:hover,
+.mobile-optimized .transition-shadow:hover {
+  transform: none !important;
+  box-shadow: none !important;
+  background-color: inherit !important;
+  color: inherit !important;
+}
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  
+  .animate-gradient {
+    animation: none !important;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  }
+}
+
+/* Mobile-specific optimizations */
+@media (max-width: 768px) {
+  /* Reduce GPU usage */
+  * {
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+  
+  /* Disable complex shadows */
+  .shadow-lg,
+  .shadow-xl {
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1) !important;
+  }
+  
+  /* Simplify gradients */
+  .bg-gradient-to-br,
+  .bg-gradient-to-r {
+    background: var(--background) !important;
+  }
+  
+  /* Force hardware acceleration off for better battery */
+  .backdrop-blur-md {
+    backdrop-filter: none !important;
+  }
+}
+
+/* Utility classes for conditional animations */
+.no-animation {
+  animation: none !important;
+  transition: none !important;
+}
+
+.mobile-safe-animation {
+  animation-duration: 0.01ms !important;
+  transition-duration: 0.01ms !important;
+}
