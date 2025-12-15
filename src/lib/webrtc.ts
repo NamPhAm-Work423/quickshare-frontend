@@ -274,10 +274,11 @@ export class WebRTCFileTransfer {
         try {
           const msg = JSON.parse(event.data) as DCMessage;
           if (msg.type === 'ack' && msg.fileId === fileId) {
-             // Received ACK. Transfer complete.
-             this.sendState = SendState.Done;
+             // Received ACK. This file transfer complete.
+             // Reset to Idle for next file (multi-file support)
+             this.sendState = SendState.Idle;
              cleanup();
-             this.onComplete?.();
+             // Don't call onComplete here - sendFiles handles overall completion
              resolve();
           }
         } catch (e) {
@@ -339,10 +340,10 @@ export class WebRTCFileTransfer {
             // ACK Timeout
             ackTimeout = setTimeout(() => {
               if (this.sendState === SendState.WaitingAck) {
-                // ACK timeout -> Assuming success
-                this.sendState = SendState.Done;
+                // ACK timeout -> Assuming success, reset for next file
+                this.sendState = SendState.Idle;
                 cleanup();
-                this.onComplete?.();
+                // Don't call onComplete here - sendFiles handles overall completion
                 resolve();
               }
             }, 30000); // 30s timeout
@@ -383,6 +384,10 @@ export class WebRTCFileTransfer {
     // Signal that all files have been transferred
     const completeMsg: DCMessage = { type: 'all_transfers_complete' };
     this.dataChannel.send(JSON.stringify(completeMsg));
+    
+    // Now call onComplete - all files have been sent successfully
+    this.sendState = SendState.Done;
+    this.onComplete?.();
   }
 
   // ==============================================================================
