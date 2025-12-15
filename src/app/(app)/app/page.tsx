@@ -65,7 +65,7 @@
          useAppStore.getState().setFile(fileToUpload);
  
          await startP2PUpload({
-           file: fileToUpload,
+           files: [fileToUpload],
            onSessionCreated: (sessionInfo) => {
              setCode(sessionInfo.code);
              setExpirationTime(sessionInfo.expiresAt);
@@ -92,7 +92,7 @@
          const textFile = new File([textBlob], 'text.txt', { type: 'text/plain' });
  
          await startP2PUpload({
-           file: textFile,
+           files: [textFile],
            onSessionCreated: (sessionInfo) => {
              setCode(sessionInfo.code);
              setExpirationTime(sessionInfo.expiresAt);

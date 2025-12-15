@@ -1,6 +1,7 @@
 // Shared components used across marketing and app
 export { Logo } from './Logo';
 export { MobileOptimizer } from './MobileOptimizer';
+export { MobileThemeFix } from './MobileThemeFix';
 export { TextPreview } from './TextPreview';
 export { ThemeProvider } from './ThemeProvider';
 export { ThemeToggle } from './ThemeToggle';

@@ -9,7 +9,6 @@ import { Textarea } from '@/components/ui/textarea';
 import FilePreview from './FilePreview';
 import Loader from './Loader';
 import { cn } from '@/lib/utils';
-import { animateClass } from '@/lib/mobile-optimizations';
 import { useAppStore } from '@/store/upload-store';
 
 interface UploadBoxProps {
@@ -26,6 +25,16 @@ const UploadBox = ({ onUpload, isUploading = false }: UploadBoxProps) => {
   const setText = useAppStore((state) => state.setText);
   const [textInput, setTextInput] = useState('');
   const pasteHandlerRef = useRef<(e: ClipboardEvent) => void>();
+  
+  // Animation state to prevent hydration mismatch
+  const [shouldAnimate, setShouldAnimate] = useState(false);
+  
+  useEffect(() => {
+    // Only enable animations on client-side after hydration
+    const isMobile = window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    setShouldAnimate(!isMobile && !prefersReducedMotion);
+  }, []);
 
   // Use first file for store compatibility (single file upload to backend)
   const file = localFiles.length > 0 ? localFiles[0] : null;
@@ -162,7 +171,7 @@ const UploadBox = ({ onUpload, isUploading = false }: UploadBoxProps) => {
             {...getRootProps()}
             className={cn(
               'flex cursor-pointer items-center justify-center gap-3 rounded-lg border-2 border-dashed p-4 bg-gradient-to-br from-white/5 via-white/0 to-white/5 backdrop-blur-md shadow-lg',
-              animateClass('transition-colors', ''),
+              shouldAnimate && 'transition-colors',
               isDragActive
                 ? 'border-primary bg-primary/10 shadow-primary/30'
                 : 'border-white/20 hover:border-primary/60',

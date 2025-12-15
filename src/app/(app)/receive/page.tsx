@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,7 +22,7 @@ function ReceiveContent() {
   const [code, setCode] = useState(initialCode);
   const [transferStatus, setTransferStatus] = useState<TransferStatus>('idle');
   const [transferProgress, setTransferProgress] = useState(0);
-  const [receivedFile, setReceivedFile] = useState<File | null>(null);
+  const [receivedFiles, setReceivedFiles] = useState<File[]>([]);
   const [receivedText, setReceivedText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasAutoStarted, setHasAutoStarted] = useState(false);
@@ -67,7 +68,7 @@ function ReceiveContent() {
       setTransferStatus('connecting');
       setError(null);
       setTransferProgress(0);
-      setReceivedFile(null);
+      setReceivedFiles([]);
       setReceivedText(null);
 
       await startP2PReceive({
@@ -77,17 +78,16 @@ function ReceiveContent() {
           if (file.type === 'text/plain' && file.name === 'text.txt') {
             const textContent = await file.text();
             setReceivedText(textContent);
-            setTransferStatus('completed');
             toast({
-              title: 'Received successfully!',
+              title: 'Received!',
               description: 'Text content received',
             });
           } else {
-            setReceivedFile(file);
-            setTransferStatus('completed');
+            // Accumulate files for multi-file transfer
+            setReceivedFiles(prev => [...prev, file]);
             toast({
-              title: 'Received successfully!',
-              description: `File ${file.name} received`,
+              title: 'File received!',
+              description: `${file.name} received`,
             });
           }
         },
@@ -98,6 +98,13 @@ function ReceiveContent() {
         onError: (errorMsg) => {
           setError(errorMsg);
           setTransferStatus('error');
+        },
+        onAllFilesComplete: () => {
+          setTransferStatus('completed');
+          toast({
+            title: 'Transfer complete!',
+            description: 'All content received successfully',
+          });
         },
       });
     } catch (err) {
@@ -123,15 +130,17 @@ function ReceiveContent() {
     }
   };
 
-  const handleDownload = () => {
-    if (receivedFile) {
-      const url = URL.createObjectURL(receivedFile);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = receivedFile.name;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
+  const handleDownload = (file: File) => {
+    const url = URL.createObjectURL(file);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = file.name;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadAll = () => {
+    receivedFiles.forEach(file => handleDownload(file));
   };
 
   const handleCopyText = () => {
@@ -148,7 +157,7 @@ function ReceiveContent() {
     setCode('');
     setTransferStatus('idle');
     setTransferProgress(0);
-    setReceivedFile(null);
+    setReceivedFiles([]);
     setReceivedText(null);
     setError(null);
     setHasAutoStarted(false);
@@ -248,20 +257,40 @@ function ReceiveContent() {
               </div>
             )}
 
-            {/* Received file */}
-            {transferStatus === 'completed' && receivedFile && (
+            {/* Received files */}
+            {transferStatus === 'completed' && receivedFiles.length > 0 && (
               <div className="space-y-4 rounded-lg border bg-muted/50 p-4">
                 <div className="flex items-center gap-2">
                   <Download className="h-5 w-5 text-primary" />
-                  <span className="font-medium">Received file: {receivedFile.name}</span>
+                  <span className="font-medium">
+                    {receivedFiles.length === 1 
+                      ? `Received: ${receivedFiles[0].name}`
+                      : `Received ${receivedFiles.length} files`
+                    }
+                  </span>
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  Size: {(receivedFile.size / 1024).toFixed(1)} KB
-                </p>
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {receivedFiles.map((file, index) => (
+                    <div key={`${file.name}-${index}`} className="flex items-center justify-between text-sm bg-background/50 p-2 rounded">
+                      <span className="truncate flex-1">{file.name}</span>
+                      <span className="text-muted-foreground ml-2">
+                        {(file.size / 1024).toFixed(1)} KB
+                      </span>
+                      <Button 
+                        size="sm" 
+                        variant="ghost" 
+                        onClick={() => handleDownload(file)}
+                        className="ml-2"
+                      >
+                        <Download className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
                 <div className="flex gap-2">
-                  <Button onClick={handleDownload} className="flex-1">
+                  <Button onClick={handleDownloadAll} className="flex-1">
                     <Download className="mr-2 h-4 w-4" />
-                    Download
+                    Download {receivedFiles.length === 1 ? '' : 'All'}
                   </Button>
                   <Button variant="outline" onClick={handleReset}>
                     Receive More
@@ -302,16 +331,18 @@ function ReceiveContent() {
   );
 }
 
+// Dynamic import to avoid SSR issues with useSearchParams
+const DynamicReceiveContent = dynamic(() => Promise.resolve(ReceiveContent), {
+  ssr: false,
+  loading: () => (
+    <main className="container mx-auto min-h-screen px-4 py-6 md:px-6 md:py-8">
+      <div className="mx-auto max-w-lg flex items-center justify-center py-20">
+        <Loader className="h-8 w-8" />
+      </div>
+    </main>
+  )
+});
+
 export default function ReceivePage() {
-  return (
-    <Suspense fallback={
-      <main className="container mx-auto min-h-screen px-4 py-6 md:px-6 md:py-8">
-        <div className="mx-auto max-w-lg flex items-center justify-center py-20">
-          <Loader className="h-8 w-8" />
-        </div>
-      </main>
-    }>
-      <ReceiveContent />
-    </Suspense>
-  );
+  return <DynamicReceiveContent />;
 }

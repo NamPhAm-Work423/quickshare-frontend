@@ -27,11 +27,13 @@ export enum ReceiveState {
 }
 
 interface DCMessage {
-  type: 'transfer_started' | 'transfer_end' | 'ack';
+  type: 'transfer_started' | 'transfer_end' | 'ack' | 'all_transfers_complete';
   fileId?: string;
   file_name?: string;
   file_size?: number;
   file_type?: string;
+  totalFiles?: number;
+  fileIndex?: number;
 }
 
 export class WebRTCFileTransfer {
@@ -51,6 +53,7 @@ export class WebRTCFileTransfer {
   private onError?: (error: string) => void;
   private onDataChannelOpen?: () => void;
   private onFileReceived?: (file: File, metadata: FileMetadata) => void;
+  private onAllFilesReceived?: () => void;
 
   // Receiver State
   private fileMetadata: { totalSize: number; fileName: string; fileType: string; fileId: string } | null = null;
@@ -360,14 +363,38 @@ export class WebRTCFileTransfer {
     });
   }
 
+  /**
+   * Send multiple files sequentially.
+   * Each file is sent completely before starting the next one.
+   */
+  async sendFiles(
+    files: File[],
+    onFileComplete?: (index: number, fileName: string) => void
+  ): Promise<void> {
+    if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
+      throw new Error('Data channel is not open');
+    }
+
+    for (let i = 0; i < files.length; i++) {
+      await this.sendFile(files[i]);
+      onFileComplete?.(i, files[i].name);
+    }
+
+    // Signal that all files have been transferred
+    const completeMsg: DCMessage = { type: 'all_transfers_complete' };
+    this.dataChannel.send(JSON.stringify(completeMsg));
+  }
+
   // ==============================================================================
   // RECEIVER LOGIC
   // ==============================================================================
 
   receiveFile(
-    onFileReceived: (file: File, metadata: FileMetadata) => void
+    onFileReceived: (file: File, metadata: FileMetadata) => void,
+    onAllFilesReceived?: () => void
   ): void {
     this.onFileReceived = onFileReceived;
+    this.onAllFilesReceived = onAllFilesReceived;
     if (this.dataChannel) {
       this.setupFileReceptionHandlers(this.dataChannel);
     }
@@ -423,6 +450,11 @@ export class WebRTCFileTransfer {
               
             case 'ack':
                 break;
+                
+            case 'all_transfers_complete':
+              // All files have been transferred
+              this.onAllFilesReceived?.();
+              break;
           }
         } catch (e) {
           // Protocol Error ignored
@@ -512,7 +544,14 @@ export class WebRTCFileTransfer {
       // Failed to send ACK
     }
     
-    this.onComplete?.();
+    // Reset state for next file (multi-file support)
+    this.fileMetadata = null;
+    this.receivedBytes = 0;
+    this.isTransferEndReceived = false;
+    this.receiveState = ReceiveState.Idle;
+    
+    // Note: onComplete is NOT called here for multi-file transfers
+    // It will be called when all_transfers_complete is received
   }
 
   cleanup(): void {

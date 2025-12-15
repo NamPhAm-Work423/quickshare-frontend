@@ -29,11 +29,18 @@ export function ThemeProvider({
   ...props
 }: ThemeProviderProps) {
   const [theme, setTheme] = React.useState<Theme>(() => {
+    // Always return defaultTheme on server-side to prevent hydration mismatch
     if (typeof window === 'undefined') {
       return defaultTheme;
     }
-    const stored = localStorage.getItem(storageKey) as Theme | null;
-    return stored || defaultTheme;
+    
+    // On client-side, check localStorage but fallback to defaultTheme
+    try {
+      const stored = localStorage.getItem(storageKey) as Theme | null;
+      return stored || defaultTheme;
+    } catch {
+      return defaultTheme;
+    }
   });
 
   // Apply theme immediately and on changes

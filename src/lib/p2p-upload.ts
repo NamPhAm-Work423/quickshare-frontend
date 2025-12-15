@@ -4,28 +4,33 @@ import { WebRTCFileTransfer } from './webrtc';
 import { CreateSessionRequest, JoinSessionRequest } from './types';
 
 export interface P2PUploadOptions {
-  file?: File;
+  files?: File[];
   onProgress?: (progress: number) => void;
+  onFileProgress?: (fileIndex: number, fileName: string, progress: number) => void;
   onComplete?: () => void;
   onError?: (error: string) => void;
   onSessionCreated?: (sessionInfo: { code: string; sessionId: string; expiresAt: Date }) => void;
 }
 
 export async function startP2PUpload(options: P2PUploadOptions) {
-  const { file, onProgress, onComplete, onError, onSessionCreated } = options;
+  const { files, onProgress, onComplete, onError, onSessionCreated } = options;
 
-  if (!file) {
-    throw new Error('File is required');
+  if (!files || files.length === 0) {
+    throw new Error('At least one file is required');
   }
 
   try {
-    // Create session
+    // Calculate total size for all files
+    const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+    const fileNames = files.map(f => f.name).join(', ');
+    
+    // Create session with metadata about all files
     const createRequest: CreateSessionRequest = {
       single_use: true,
       metadata: {
-        file_name: file.name,
-        file_size: file.size,
-        file_type: file.type,
+        file_name: files.length === 1 ? files[0].name : `${files.length} files`,
+        file_size: totalSize,
+        file_type: files.length === 1 ? files[0].type : 'multiple',
       },
     };
 
@@ -63,6 +68,8 @@ export async function startP2PUpload(options: P2PUploadOptions) {
     return new Promise<void>((resolve, reject) => {
       let dataChannelOpened = false;
       let webrtc: WebRTCFileTransfer | null = null;
+      let totalBytesSent = 0;
+      let currentFileIndex = 0;
 
       // Listen for when receiver joins the session
       signaling.on('peer_connected', async () => {
@@ -70,7 +77,12 @@ export async function startP2PUpload(options: P2PUploadOptions) {
         // Create WebRTC with onDataChannelOpen callback
         webrtc = new WebRTCFileTransfer(signaling, iceServers, {
           onProgress: (progress) => {
-            onProgress?.(progress.percent);
+            // Calculate overall progress across all files
+            const currentFileSize = files[currentFileIndex]?.size || 0;
+            const currentFileBytes = (progress.percent / 100) * currentFileSize;
+            const overallBytes = totalBytesSent + currentFileBytes;
+            const overallProgress = (overallBytes / totalSize) * 100;
+            onProgress?.(overallProgress);
           },
           onComplete: () => {
             onComplete?.();
@@ -84,9 +96,14 @@ export async function startP2PUpload(options: P2PUploadOptions) {
           },
           onDataChannelOpen: () => {
             dataChannelOpened = true;
-            // Start sending file when data channel is ready
+            // Start sending files when data channel is ready
             webrtc
-              ?.sendFile(file)
+              ?.sendFiles(files, (index, fileName) => {
+                // Track bytes sent for progress calculation
+                totalBytesSent += files[index].size;
+                currentFileIndex = index + 1;
+                options.onFileProgress?.(index, fileName, 100);
+              })
               .then(() => {
                 resolve();
               })
@@ -104,7 +121,7 @@ export async function startP2PUpload(options: P2PUploadOptions) {
         }
       });
 
-      // Timeout after 60 seconds (peer connection + data channel)
+      // Timeout after 10 minutes (peer connection + data channel)
       setTimeout(() => {
         if (!dataChannelOpened) {
           reject(new Error('Connection timeout - no peer connected or data channel failed'));
@@ -120,15 +137,17 @@ export async function startP2PUpload(options: P2PUploadOptions) {
   }
 }
 
+
 export interface P2PReceiveOptions {
   code: string;
   onFileReceived: (file: File) => void;
   onProgress?: (progress: number) => void;
   onError?: (error: string) => void;
+  onAllFilesComplete?: () => void;
 }
 
 export async function startP2PReceive(options: P2PReceiveOptions) {
-  const { code, onFileReceived, onProgress, onError } = options;
+  const { code, onFileReceived, onProgress, onError, onAllFilesComplete } = options;
 
   try {
     // Join session
@@ -168,8 +187,10 @@ export async function startP2PReceive(options: P2PReceiveOptions) {
           onProgress?.(progress.percent);
         },
         onComplete: () => {
+          // This is called when all_transfers_complete is received
           webrtc.cleanup();
           signaling.disconnect();
+          onAllFilesComplete?.();
           resolve();
         },
         onError: (error) => {
@@ -181,18 +202,27 @@ export async function startP2PReceive(options: P2PReceiveOptions) {
       });
 
       webrtc.initializeAsReceiver().then(() => {
-        // Set up file reception
-        webrtc.receiveFile((file, metadata) => {
-          onFileReceived(file);
-        });
+        // Set up file reception - callback is called for EACH file received
+        webrtc.receiveFile(
+          (file, metadata) => {
+            onFileReceived(file);
+          },
+          () => {
+            // Called when all_transfers_complete is received
+            webrtc.cleanup();
+            signaling.disconnect();
+            onAllFilesComplete?.();
+            resolve();
+          }
+        );
       }).catch(reject);
 
-      // Timeout after 5 minutes for large files
+      // Timeout after 10 minutes for large/multiple files
       setTimeout(() => {
         reject(new Error('File transfer timeout'));
         webrtc.cleanup();
         signaling.disconnect();
-      }, 5 * 60 * 1000);
+      }, 10 * 60 * 1000);
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Receive failed';
@@ -200,3 +230,4 @@ export async function startP2PReceive(options: P2PReceiveOptions) {
     throw error;
   }
 }
+

@@ -182,3 +182,23 @@ nextjs-portal {
   animation-duration: 0.01ms !important;
   transition-duration: 0.01ms !important;
 }
+
+/* Fix white flash on mobile by ensuring dark backgrounds */
+@media (max-width: 768px) {
+  /* Override any white backgrounds that don't have dark variants */
+  .bg-white:not(.dark\:bg-white) {
+    background-color: hsl(var(--background)) !important;
+    color: hsl(var(--foreground)) !important;
+  }
+  
+  /* Ensure body and html always have dark background */
+  html, body {
+    background-color: hsl(var(--background)) !important;
+    color: hsl(var(--foreground)) !important;
+  }
+  
+  /* Fix any potential white containers */
+  .container, main, section {
+    background-color: transparent !important;
+  }
+}
