@@ -68,7 +68,7 @@ export const errorMessages: Record<ErrorCode, string> = {
   
   [ErrorCode.INVALID_CODE]: 'Mã không hợp lệ. Vui lòng kiểm tra lại.',
   [ErrorCode.CODE_EXPIRED]: 'Mã đã hết hạn. Vui lòng yêu cầu mã mới.',
-  [ErrorCode.SESSION_NOT_FOUND]: 'Không tìm thấy phiên chia sẻ.',
+  [ErrorCode.SESSION_NOT_FOUND]: 'Không tìm thấy mã. Vui lòng kiểm tra lại mã 6 số.',
   [ErrorCode.SESSION_FULL]: 'Phiên chia sẻ đã đầy.',
   
   [ErrorCode.DATACHANNEL_ERROR]: 'Lỗi kênh dữ liệu. Vui lòng thử lại.',

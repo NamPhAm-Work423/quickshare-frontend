@@ -114,8 +114,10 @@ function ReceiveContent() {
 
       // Log & show friendly error messages
       let toastMessage = errorMessage;
-      if (errorMessage.toLowerCase().includes('expired') || errorMessage.toLowerCase().includes('not found')) {
-        toastMessage = 'Code not found or expired';
+      if (errorMessage.toLowerCase().includes('không tìm thấy mã') || errorMessage.toLowerCase().includes('not found')) {
+        toastMessage = 'Không tìm thấy mã. Vui lòng kiểm tra lại mã 6 số.';
+      } else if (errorMessage.toLowerCase().includes('expired') || errorMessage.toLowerCase().includes('hết hạn')) {
+        toastMessage = 'Mã đã hết hạn. Vui lòng yêu cầu mã mới.';
       } else if (errorMessage.toLowerCase().includes('invalid')) {
         toastMessage = 'Invalid code. Please check and try again.';
       } else if (errorMessage.toLowerCase().includes('rate limit')) {

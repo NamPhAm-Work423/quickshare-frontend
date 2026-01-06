@@ -1,5 +1,5 @@
-import { SignalingClient } from './signaling';
-import { SignalingMessage } from './types';
+import { SignalingClient } from "./signaling";
+import { SignalingMessage } from "./types";
 
 export interface FileMetadata {
   fileId: string;
@@ -14,20 +14,20 @@ export interface TransferProgress {
 }
 
 export enum SendState {
-  Idle = 'Idle',
-  Sending = 'Sending',
-  WaitingAck = 'WaitingAck',
-  Done = 'Done',
+  Idle = "Idle",
+  Sending = "Sending",
+  WaitingAck = "WaitingAck",
+  Done = "Done",
 }
 
 export enum ReceiveState {
-  Idle = 'Idle',
-  Receiving = 'Receiving',
-  Done = 'Done',
+  Idle = "Idle",
+  Receiving = "Receiving",
+  Done = "Done",
 }
 
 interface DCMessage {
-  type: 'transfer_started' | 'transfer_end' | 'ack' | 'all_transfers_complete';
+  type: "transfer_started" | "transfer_end" | "ack" | "all_transfers_complete";
   fileId?: string;
   file_name?: string;
   file_size?: number;
@@ -39,14 +39,15 @@ interface DCMessage {
 export class WebRTCFileTransfer {
   private pc: RTCPeerConnection | null = null;
   private dataChannel: RTCDataChannel | null = null;
-  
-  // Strict buffer limits
-  private readonly MAX_BUFFER_SIZE = 4 * 1024 * 1024; // 4MB
-  private readonly LOW_BUFFER_THRESHOLD = 2 * 1024 * 1024; // 2MB
+
+  // Optimized buffer limits for high-speed transfers
+  private readonly MAX_BUFFER_SIZE = 16 * 1024 * 1024; // 16MB - allow more buffering
+  private readonly LOW_BUFFER_THRESHOLD = 8 * 1024 * 1024; // 8MB
+  private readonly CHUNK_SIZE = 256 * 1024; // 256KB optimal for WebRTC
 
   private signaling: SignalingClient;
   private iceServers: RTCConfiguration;
-  
+
   // Callbacks
   private onProgress?: (progress: TransferProgress) => void;
   private onComplete?: () => void;
@@ -56,15 +57,20 @@ export class WebRTCFileTransfer {
   private onAllFilesReceived?: () => void;
 
   // Receiver State
-  private fileMetadata: { totalSize: number; fileName: string; fileType: string; fileId: string } | null = null;
+  private fileMetadata: {
+    totalSize: number;
+    fileName: string;
+    fileType: string;
+    fileId: string;
+  } | null = null;
   private activeTransferBuffer: Uint8Array | null = null; // Pre-allocated buffer
   private receivedBytes: number = 0;
   private isTransferEndReceived: boolean = false;
-  
+
   // State Machine
   private sendState: SendState = SendState.Idle;
   private receiveState: ReceiveState = ReceiveState.Idle;
-  
+
   private isCleaningUp: boolean = false;
 
   constructor(
@@ -89,19 +95,19 @@ export class WebRTCFileTransfer {
 
   private setupSignalingHandlers(): void {
     // Signaling is ONLY for connection establishment, NOT for transfer control.
-    this.signaling.on('offer', (msg) => {
+    this.signaling.on("offer", (msg) => {
       this.handleOffer(msg.sdp);
     });
 
-    this.signaling.on('answer', (msg) => {
+    this.signaling.on("answer", (msg) => {
       this.handleAnswer(msg.sdp);
     });
 
-    this.signaling.on('ice_candidate', (msg) => {
+    this.signaling.on("ice_candidate", (msg) => {
       this.handleIceCandidate(msg);
     });
 
-    this.signaling.on('peer_disconnected', () => {
+    this.signaling.on("peer_disconnected", () => {
       this.cleanup();
     });
   }
@@ -114,10 +120,10 @@ export class WebRTCFileTransfer {
     this.pc = new RTCPeerConnection(this.iceServers);
 
     // Create data channel
-    this.dataChannel = this.pc.createDataChannel('fileTransfer', {
+    this.dataChannel = this.pc.createDataChannel("fileTransfer", {
       ordered: true,
     });
-    
+
     // ENFORCE Threshold immediately
     this.dataChannel.bufferedAmountLowThreshold = this.LOW_BUFFER_THRESHOLD;
 
@@ -127,7 +133,7 @@ export class WebRTCFileTransfer {
     this.pc.onicecandidate = (event) => {
       if (event.candidate) {
         this.signaling.send({
-          type: 'ice_candidate',
+          type: "ice_candidate",
           candidate: event.candidate.candidate,
           sdp_mid: event.candidate.sdpMid || undefined,
           sdp_mline_index: event.candidate.sdpMLineIndex || undefined,
@@ -140,8 +146,8 @@ export class WebRTCFileTransfer {
     await this.pc.setLocalDescription(offer);
 
     this.signaling.send({
-      type: 'offer',
-      sdp: offer.sdp || '',
+      type: "offer",
+      sdp: offer.sdp || "",
     });
   }
 
@@ -159,7 +165,7 @@ export class WebRTCFileTransfer {
     this.pc.onicecandidate = (event) => {
       if (event.candidate) {
         this.signaling.send({
-          type: 'ice_candidate',
+          type: "ice_candidate",
           candidate: event.candidate.candidate,
           sdp_mid: event.candidate.sdpMid || undefined,
           sdp_mline_index: event.candidate.sdpMLineIndex || undefined,
@@ -174,22 +180,28 @@ export class WebRTCFileTransfer {
     }
     if (!this.pc) return;
 
-    await this.pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp }));
+    await this.pc.setRemoteDescription(
+      new RTCSessionDescription({ type: "offer", sdp })
+    );
     const answer = await this.pc.createAnswer();
     await this.pc.setLocalDescription(answer);
 
     this.signaling.send({
-      type: 'answer',
-      sdp: answer.sdp || '',
+      type: "answer",
+      sdp: answer.sdp || "",
     });
   }
 
   private async handleAnswer(sdp: string): Promise<void> {
     if (!this.pc) return;
-    await this.pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp }));
+    await this.pc.setRemoteDescription(
+      new RTCSessionDescription({ type: "answer", sdp })
+    );
   }
 
-  private async handleIceCandidate(msg: SignalingMessage & { type: 'ice_candidate' }): Promise<void> {
+  private async handleIceCandidate(
+    msg: SignalingMessage & { type: "ice_candidate" }
+  ): Promise<void> {
     if (!this.pc) return;
     const candidate = new RTCIceCandidate({
       candidate: msg.candidate,
@@ -205,8 +217,12 @@ export class WebRTCFileTransfer {
     };
 
     channel.onerror = (error) => {
-      if (!this.isCleaningUp && this.sendState !== SendState.Done && this.receiveState !== ReceiveState.Done) {
-        this.onError?.('Data channel error');
+      if (
+        !this.isCleaningUp &&
+        this.sendState !== SendState.Done &&
+        this.receiveState !== ReceiveState.Done
+      ) {
+        this.onError?.("Data channel error");
       }
     };
 
@@ -219,20 +235,38 @@ export class WebRTCFileTransfer {
   // SENDER LOGIC
   // ==============================================================================
 
+  /**
+   * Wait for DataChannel buffer to drain below threshold
+   */
+  private waitForBufferDrain(): Promise<void> {
+    return new Promise((resolve) => {
+      if (
+        !this.dataChannel ||
+        this.dataChannel.bufferedAmount <= this.LOW_BUFFER_THRESHOLD
+      ) {
+        resolve();
+        return;
+      }
+      const onLow = () => {
+        this.dataChannel?.removeEventListener("bufferedamountlow", onLow);
+        resolve();
+      };
+      this.dataChannel.addEventListener("bufferedamountlow", onLow);
+    });
+  }
+
   async sendFile(file: File): Promise<void> {
-    if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
-      throw new Error('Data channel is not open');
+    if (!this.dataChannel || this.dataChannel.readyState !== "open") {
+      throw new Error("Data channel is not open");
     }
 
     // 1. Generate ID and reset state
     const fileId = crypto.randomUUID();
     this.sendState = SendState.Sending;
 
-    // Starting transfer
-
     // 2. Send Metadata via DataChannel
     const metaMsg: DCMessage = {
-      type: 'transfer_started',
+      type: "transfer_started",
       fileId: fileId,
       file_name: file.name,
       file_size: file.size,
@@ -240,128 +274,95 @@ export class WebRTCFileTransfer {
     };
     this.dataChannel.send(JSON.stringify(metaMsg));
 
-    const CHUNK_SIZE = 16 * 1024; // 16KB
-    let offset = 0;
+    // 3. Setup ACK handling
+    let ackReceived = false;
+    let ackResolve: () => void;
+    const ackPromise = new Promise<void>((resolve) => {
+      ackResolve = resolve;
+    });
 
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      let ackTimeout: ReturnType<typeof setTimeout>;
-
-      const cleanup = () => {
-        this.dataChannel?.removeEventListener('error', onError);
-        this.dataChannel?.removeEventListener('close', onClose);
-        this.dataChannel?.removeEventListener('message', onMessage);
-        
-        if (ackTimeout) {
-            clearTimeout(ackTimeout);
+    const onMessage = (event: MessageEvent) => {
+      if (typeof event.data !== "string") return;
+      try {
+        const msg = JSON.parse(event.data) as DCMessage;
+        if (msg.type === "ack" && msg.fileId === fileId) {
+          ackReceived = true;
+          ackResolve();
         }
-      };
+      } catch {
+        // Bad message ignored
+      }
+    };
 
-      const onError = (e: Event) => {
-        const err = e instanceof ErrorEvent ? e.error : new Error('DataChannel Error');
-        cleanup();
-        reject(err);
-      };
+    const onError = () => {
+      if (this.sendState === SendState.Sending) {
+        throw new Error("DataChannel error during transfer");
+      }
+    };
 
-      const onClose = () => {
-        cleanup();
-        reject(new Error('DataChannel closed unexpectedly'));
-      };
+    const onClose = () => {
+      if (this.sendState === SendState.Sending) {
+        throw new Error("DataChannel closed unexpectedly");
+      }
+    };
 
-      // 4. Handle ACK
-      const onMessage = (event: MessageEvent) => {
-        if (typeof event.data !== 'string') return;
-        try {
-          const msg = JSON.parse(event.data) as DCMessage;
-          if (msg.type === 'ack' && msg.fileId === fileId) {
-             // Received ACK. This file transfer complete.
-             // Reset to Idle for next file (multi-file support)
-             this.sendState = SendState.Idle;
-             cleanup();
-             // Don't call onComplete here - sendFiles handles overall completion
-             resolve();
+    this.dataChannel.addEventListener("message", onMessage);
+    this.dataChannel.addEventListener("error", onError);
+    this.dataChannel.addEventListener("close", onClose);
+
+    try {
+      // 4. Stream file using modern Streams API
+      const stream = file.stream();
+      const reader = stream.getReader();
+      let offset = 0;
+
+      try {
+        while (this.sendState === SendState.Sending) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          // Backpressure: wait if buffer is filling up
+          if (this.dataChannel.bufferedAmount > this.MAX_BUFFER_SIZE) {
+            await this.waitForBufferDrain();
           }
-        } catch (e) {
-          // Bad message ignored
-        }
-      };
 
-      this.dataChannel?.addEventListener('error', onError);
-      this.dataChannel?.addEventListener('close', onClose);
-      this.dataChannel?.addEventListener('message', onMessage);
+          // Check channel is still valid after waiting
+          if (!this.dataChannel || this.dataChannel.readyState !== "open") {
+            throw new Error("DataChannel closed during transfer");
+          }
 
-      // 3. Send Loop with Backpressure
-      const readAndSend = () => {
-        if (this.sendState !== SendState.Sending) return;
+          // Send chunk (value is Uint8Array from stream, typically 64KB-1MB)
+          this.dataChannel.send(value);
+          offset += value.byteLength;
 
-        const slice = file.slice(offset, offset + CHUNK_SIZE);
-        reader.readAsArrayBuffer(slice);
-      };
-
-      reader.onload = (e) => {
-        if (!e.target?.result || !this.dataChannel) {
-          cleanup();
-          reject(new Error('Read failed or channel lost'));
-          return;
-        }
-
-        const chunk = e.target.result as ArrayBuffer;
-        
-        try {
-          this.dataChannel.send(chunk);
-          offset += chunk.byteLength;
-
-          // Progress
+          // Progress callback
           const percent = (offset / file.size) * 100;
           this.onProgress?.({ percent, bytesTransferred: offset });
-
-          if (offset < file.size) {
-            // Check buffer
-            if (this.dataChannel.bufferedAmount > this.MAX_BUFFER_SIZE) {
-               // Wait for bufferedamountlow
-               const onLow = () => {
-                  this.dataChannel?.removeEventListener('bufferedamountlow', onLow);
-                  readAndSend();
-               };
-               this.dataChannel.addEventListener('bufferedamountlow', onLow);
-            } else {
-               // Keep going
-               readAndSend();
-            }
-          } else {
-            // File sent. Send End.
-            // File sent. Sending transfer_end
-            const endMsg: DCMessage = { type: 'transfer_end', fileId };
-            this.dataChannel.send(JSON.stringify(endMsg));
-            
-            this.sendState = SendState.WaitingAck;
-            // Waiting for ACK
-
-            // ACK Timeout
-            ackTimeout = setTimeout(() => {
-              if (this.sendState === SendState.WaitingAck) {
-                // ACK timeout -> Assuming success, reset for next file
-                this.sendState = SendState.Idle;
-                cleanup();
-                // Don't call onComplete here - sendFiles handles overall completion
-                resolve();
-              }
-            }, 30000); // 30s timeout
-          }
-        } catch (err) {
-          cleanup();
-          reject(err);
         }
-      };
-      
-      reader.onerror = () => {
-        cleanup();
-        reject(new Error('File read error'));
-      };
+      } finally {
+        reader.releaseLock();
+      }
 
-      // Kick off
-      readAndSend();
-    });
+      // 5. Send transfer_end
+      const endMsg: DCMessage = { type: "transfer_end", fileId };
+      this.dataChannel.send(JSON.stringify(endMsg));
+      this.sendState = SendState.WaitingAck;
+
+      // 6. Wait for ACK with timeout
+      const ackTimeout = new Promise<void>((resolve) => {
+        setTimeout(() => resolve(), 30000); // 30s timeout
+      });
+
+      await Promise.race([ackPromise, ackTimeout]);
+
+      // Reset state for next file
+      this.sendState = SendState.Idle;
+    } finally {
+      // Cleanup listeners
+      this.dataChannel?.removeEventListener("message", onMessage);
+      this.dataChannel?.removeEventListener("error", onError);
+      this.dataChannel?.removeEventListener("close", onClose);
+    }
   }
 
   /**
@@ -372,16 +373,16 @@ export class WebRTCFileTransfer {
     files: File[],
     onFileComplete?: (index: number, fileName: string) => void
   ): Promise<void> {
-    if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
-      throw new Error('Data channel is not open');
+    if (!this.dataChannel || this.dataChannel.readyState !== "open") {
+      throw new Error("Data channel is not open");
     }
-    
+
     for (let i = 0; i < files.length; i++) {
       // Delay to prevent race conditions
       if (i > 0) {
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise((r) => setTimeout(r, 500));
       }
-      
+
       try {
         await this.sendFile(files[i]);
         onFileComplete?.(i, files[i].name);
@@ -391,9 +392,9 @@ export class WebRTCFileTransfer {
     }
 
     // Signal that all files have been transferred
-    const completeMsg: DCMessage = { type: 'all_transfers_complete' };
+    const completeMsg: DCMessage = { type: "all_transfers_complete" };
     this.dataChannel.send(JSON.stringify(completeMsg));
-    
+
     // Now call onComplete - all files have been sent successfully
     this.sendState = SendState.Done;
     this.onComplete?.();
@@ -417,55 +418,58 @@ export class WebRTCFileTransfer {
   private setupFileReceptionHandlers(channel: RTCDataChannel): void {
     channel.onmessage = (event) => {
       // 1. Handling Protocol Messages (Strings)
-      if (typeof event.data === 'string') {
+      if (typeof event.data === "string") {
         try {
           const msg = JSON.parse(event.data) as DCMessage;
 
           switch (msg.type) {
-            case 'transfer_started':
+            case "transfer_started":
               if (!msg.fileId || !msg.file_name || !msg.file_size) {
-                 // Invalid transfer_started
-                 return;
+                // Invalid transfer_started
+                return;
               }
               // Starting transfer
-              
+
               // Reset state
               this.fileMetadata = {
                 fileId: msg.fileId,
                 totalSize: msg.file_size,
                 fileName: msg.file_name,
-                fileType: msg.file_type || 'application/octet-stream'
+                fileType: msg.file_type || "application/octet-stream",
               };
-              
+
               // Pre-allocate buffer logic
               try {
                 this.activeTransferBuffer = new Uint8Array(msg.file_size);
               } catch (oom) {
-                this.onError?.('Not enough memory for file transfer');
+                this.onError?.("Not enough memory for file transfer");
                 return;
               }
-              
+
               this.receivedBytes = 0;
               this.isTransferEndReceived = false;
               this.receiveState = ReceiveState.Receiving;
               break;
 
-            case 'transfer_end':
-              if (this.receiveState === ReceiveState.Receiving && this.fileMetadata?.fileId === msg.fileId) {
+            case "transfer_end":
+              if (
+                this.receiveState === ReceiveState.Receiving &&
+                this.fileMetadata?.fileId === msg.fileId
+              ) {
                 // transfer_end received
                 this.isTransferEndReceived = true;
-                
+
                 // Try finalize (if bytes also complete)
                 this.tryFinalizeTransfer();
               } else {
                 // Ignored transfer_end (ID mismatch or wrong state)
               }
               break;
-              
-            case 'ack':
-                break;
-                
-            case 'all_transfers_complete':
+
+            case "ack":
+              break;
+
+            case "all_transfers_complete":
               // All files have been transferred
               this.onAllFilesReceived?.();
               break;
@@ -479,14 +483,21 @@ export class WebRTCFileTransfer {
       // 2. Handling Binary Chunks
       if (event.data instanceof ArrayBuffer) {
         // STRICT GUARD: Must be in Receiving state
-        if (this.receiveState !== ReceiveState.Receiving || !this.fileMetadata || !this.activeTransferBuffer) {
+        if (
+          this.receiveState !== ReceiveState.Receiving ||
+          !this.fileMetadata ||
+          !this.activeTransferBuffer
+        ) {
           return; // Hard drop
         }
 
         const chunk = new Uint8Array(event.data);
-        
+
         // Safety check bound
-        if (this.receivedBytes + chunk.length > this.activeTransferBuffer.length) {
+        if (
+          this.receivedBytes + chunk.length >
+          this.activeTransferBuffer.length
+        ) {
           // Overflow detected - dropping chunk
           // Can either drop or abort. Aborting is safer.
           // For now, let's stop accepting.
@@ -496,10 +507,11 @@ export class WebRTCFileTransfer {
         // Write directly to buffer
         this.activeTransferBuffer.set(chunk, this.receivedBytes);
         this.receivedBytes += chunk.length;
-        
+
         // Progress O(1)
-        const percent = (this.receivedBytes / this.fileMetadata.totalSize) * 100;
-        
+        const percent =
+          (this.receivedBytes / this.fileMetadata.totalSize) * 100;
+
         // Throttled notification (every 1% or so, or every chunk if small)
         // Since we don't have throttle var, calling every chunk is okay-ish as it's just calc.
         this.onProgress?.({ percent, bytesTransferred: this.receivedBytes });
@@ -512,44 +524,48 @@ export class WebRTCFileTransfer {
 
   private tryFinalizeTransfer(): void {
     if (
-        this.receiveState === ReceiveState.Receiving && 
-        this.isTransferEndReceived && 
-        this.receivedBytes >= (this.fileMetadata?.totalSize || 0)
+      this.receiveState === ReceiveState.Receiving &&
+      this.isTransferEndReceived &&
+      this.receivedBytes >= (this.fileMetadata?.totalSize || 0)
     ) {
-        this.finalizeTransfer();
+      this.finalizeTransfer();
     }
   }
 
   private finalizeTransfer(): void {
     const metadata = this.fileMetadata;
     const buffer = this.activeTransferBuffer;
-    
+
     if (!metadata || !buffer) return;
 
     // Finalizing transfer. All checks passed.
     this.receiveState = ReceiveState.Done;
-    
+
     // Create Blob from pre-allocated buffer
-    const blob = new Blob([buffer as unknown as BlobPart], { type: metadata.fileType });
-    const file = new File([blob], metadata.fileName, { type: metadata.fileType });
-    
+    const blob = new Blob([buffer as unknown as BlobPart], {
+      type: metadata.fileType,
+    });
+    const file = new File([blob], metadata.fileName, {
+      type: metadata.fileType,
+    });
+
     // Notify app
     this.onFileReceived?.(file, {
       fileId: metadata.fileId,
       name: metadata.fileName,
       size: metadata.totalSize,
-      type: metadata.fileType
+      type: metadata.fileType,
     });
 
     // Cleanup heavy buffer immediately
-    this.activeTransferBuffer = null; 
+    this.activeTransferBuffer = null;
 
     // Send ACK via DataChannel
     try {
-      if (this.dataChannel && this.dataChannel.readyState === 'open') {
+      if (this.dataChannel && this.dataChannel.readyState === "open") {
         const ackMsg: DCMessage = {
-          type: 'ack',
-          fileId: this.fileMetadata.fileId
+          type: "ack",
+          fileId: this.fileMetadata.fileId,
         };
         this.dataChannel.send(JSON.stringify(ackMsg));
         // ACK sent
@@ -557,13 +573,13 @@ export class WebRTCFileTransfer {
     } catch (e) {
       // Failed to send ACK
     }
-    
+
     // Reset state for next file (multi-file support)
     this.fileMetadata = null;
     this.receivedBytes = 0;
     this.isTransferEndReceived = false;
     this.receiveState = ReceiveState.Idle;
-    
+
     // Note: onComplete is NOT called here for multi-file transfers
     // It will be called when all_transfers_complete is received
   }
